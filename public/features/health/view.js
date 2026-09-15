@@ -1,5 +1,18 @@
 /** Tracking Health — script presence + tracking parameters. Renders ctx.block into ctx.root. */
 const SCRIPT_OK = new Set(['SCRIPT_FOUND', 'FOUND', 'OK', 'PRESENT', 'INSTALLED']);
+// snapshot.warnings[].kind -> pill text. Skips are quiet, failures are bad.
+const WARN_LABEL = { unsupported: 'skipped: unsupported', 'time budget': 'skipped: time budget', rate_limited: 'rate limited', truncated: 'truncated', error: 'error' };
+const WARN_BAD = new Set(['rate_limited', 'error']);
+
+/** One pill per distinct warning kind for this ad account (core snapshot.warnings), escaped. */
+function warningPills(adAccount, warnings, esc) {
+  const mine = warnings.filter((w) => String(w?.adAccountId) === String(adAccount.id));
+  const kinds = [...new Set(mine.map((w) => w?.kind || 'error'))];
+  return kinds.map((kind) => {
+    const detail = mine.filter((w) => (w?.kind || 'error') === kind).map((w) => [w.level, w.error].filter(Boolean).join(': ')).join(' · ');
+    return `<span class="pill ${WARN_BAD.has(kind) ? 'bad' : 'warn'}" title="${esc(detail)}">${esc(WARN_LABEL[kind] || `skipped: ${kind}`)}</span>`;
+  }).join('');
+}
 
 export function render(ctx) {
   const { fmt, esc, kpis, snapshot } = ctx;
@@ -10,6 +23,7 @@ export function render(ctx) {
   const paramRows = (h.trackingParams || []).flatMap((p) => (p.rows || []).map((r) => ({ ...r, _type: p.type })));
   const flagged = paramRows.filter((r) => r && (r.valid === false || r.missing || r.ok === false || /missing|invalid/i.test(JSON.stringify(r))));
   const acct = snapshot.account || {};
+  const warnings = Array.isArray(snapshot.warnings) ? snapshot.warnings : [];
   // The step did not run this refresh (no data at all) vs. ran earlier and is
   // being shown again (stale). Only a block with a checkedAt actually ran.
   const notRun = !h.checkedAt;
@@ -47,7 +61,7 @@ export function render(ctx) {
       </div>
       <div class="fpanel"><h3>Account &amp; access</h3>
         <div class="fhint">connected ad accounts and agency relationships (MCP: allowedAccounts / accessibleAccounts)</div>
-        ${(snapshot.adAccounts || []).map((a) => `<div class="health-row"><code>${esc(a.name)}</code><span class="pill">${esc(a.type)}</span><span class="sub">${esc(a.id)}</span></div>`).join('')}
+        ${(snapshot.adAccounts || []).map((a) => `<div class="health-row"><code>${esc(a.name)}</code><span class="pill">${esc(a.type)}</span><span class="sub">${esc(a.id)}</span>${warningPills(a, warnings, esc)}</div>`).join('')}
         ${(acct.managedBy || []).map((a) => `<div class="health-row"><code>managed by ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
         ${(acct.clients || []).map((a) => `<div class="health-row"><code>client ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
         ${acct.attributionWindowDefault ? `<div class="health-row"><code>account attribution window</code><span class="pill">${acct.attributionWindowDefault} days</span></div>` : ''}
