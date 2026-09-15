@@ -75,8 +75,21 @@ account); every third entity keeps scaling (no saturation).
 ## Porting notes
 Another app needs the block above; `view.js` + `style.css` reuse unchanged.
 HYROS-specific: the 90-day cap at account level, the `{ request }`
-argument wrapper, UPPERCASE `level` values.
+argument wrapper, and the `level` vocabulary. The REST docs spell the
+levels `ad | source_link | campaign | account` (lowercase); the MCP tool is
+sent them **UPPERCASE** (`ACCOUNT`, `SOURCE_LINK`) — that casing is
+undocumented and mirrors the other report tools (see FINDINGS.md
+"Undocumented behaviour the app relies on").
 
 ## Open limitations
-The tool currently returns 404 on some accounts (see FINDINGS.md); until
-HYROS enables it, the tab shows the "did not answer" card on those accounts.
+- The tool returns **HTTP 404 on the live MCP (checked 2026-09-15)** for
+  both `account` and `campaign` levels; until HYROS enables it for the
+  account, every curve carries `error` and the view shows one error card
+  ("HYROS did not answer the CAC curve tool … ask HYROS support").
+- `cacCeiling` is optional with no default: without `HYROS_CAC_CEILING`
+  the account-level curves have no ceiling and therefore no saturation
+  point (documented behaviour, not a bug).
+- The `notes` enum and `saturationPoint.reason` values beyond
+  `MARGINAL_CAC_ABOVE_CEILING` are documented only as prose; the view maps
+  the four documented notes to plain words and shows any other value
+  verbatim.

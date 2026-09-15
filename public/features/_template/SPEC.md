@@ -9,6 +9,11 @@ One paragraph: the question this tab answers and for whom.
 - Which HYROS MCP tools the server step calls, with the request shape and
   the limits honoured (page size, time budget, max calls).
 - What the demo generator fakes and how (seed, ranges used).
+- **MCP limits reminder** (FEATURES.md "MCP limits"): ≤ 50 ids / emails /
+  tags per call; `pageSize` ≤ 250; per-call timeouts ≤ 15 s; one rate limit
+  per HYROS account, shared across every key of the account and across an
+  agency's clients; `accessible_account_id` (and the API key) are already
+  applied by `ctx.callTool` — never pass them yourself.
 
 ## Block shape (`snapshot.<id>`)
 ```json
@@ -33,5 +38,6 @@ What another app must provide (the block shape above) to reuse `view.js`
 and `style.css` unchanged; anything HYROS-specific in `server.js`.
 
 ## Open limitations
-What is illustrative vs live, and which missing MCP capability (see
-FINDINGS.md) would make it fully live.
+What is illustrative vs live, and which missing MCP capability would make
+it fully live — cite the FINDINGS.md section by title (e.g. "Aggregate
+clicks endpoint", "Undocumented behaviour the app relies on").

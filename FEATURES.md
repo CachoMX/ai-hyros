@@ -113,7 +113,7 @@ never throw. Read every field with a fallback (`b.rows || []`).
 | `account`, `range`, `level` | current account id, report range key (`today`/`yesterday`/`7d`/`30d`), report level |
 | `fmt` | `money(v)`, `int(v)`, `pct(v)`, `date(iso)`, `datetime(iso)` — honours the demo "no cents" rule |
 | `esc(s)` | HTML-escape — use on every data string |
-| `kpis(list)` | KPI tiles HTML: `[{ label, value, sub?, cls?: 'good'\|'bad' }]`; wrap in `<div class="kpis">` |
+| `kpis(list)` | KPI tiles HTML: `[{ label, value, sub?, cls?: 'good'\|'bad' }]`; wrap in `<div class="kpis">`. `label`, `value` and `sub` are rendered as **escaped text** (no HTML inside them; pass data strings as-is) |
 | `formatCell(col, value)` | the report's metric formatter (for catalog metrics) |
 | `note(msg, isErr)` | the report-page notice bar |
 | `openJourney(email)` | open the lead journey drawer for an email |
