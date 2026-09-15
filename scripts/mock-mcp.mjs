@@ -122,12 +122,25 @@ const TOOLS = {
   hyros_get_sales: () => ({ result: [{ id: 's1', lead: { email: 'lead1@example.test', firstName: 'Lead', lastName: '1' }, creationDate: '2026-09-05T12:00:00-05:00', usdPrice: { price: 149, currency: 'USD' }, product: { name: 'Bundle' }, firstSource: { name: 'Prospecting Broad' }, lastSource: { name: 'Prospecting Broad' } }], nextPageId: null }),
   hyros_get_calls: () => ({ result: [], nextPageId: null }),
   hyros_get_subscriptions: () => ({ result: [], nextPageId: null }),
-  hyros_get_marginal_cac_curve: ({ request }) => ({
-    id: request.id, level: request.level, startDate: request.startDate, endDate: request.endDate,
-    attributionModel: 'FIRST_CLICK', daysSampled: 42, cacCeiling: request.cacCeiling ?? 95, ceilingBasis: request.cacCeiling ? 'CALLER_PROVIDED' : 'REALIZED_LTV_90_DAYS',
-    curve: [20, 40, 60, 80, 100].map((spend) => ({ dailySpend: spend, averageCac: 40 + spend * 0.3, marginalCac: 40 + spend * 0.8, customers: Math.round(spend / (40 + spend * 0.3)) })),
-    saturationPoint: { dailySpend: 70 }, notes: [],
-  }),
+  // Documented shape (rest-api.txt /attribution/marginal-cac-curve): spend levels
+  // in ascending order, marginalCac null on the first bucket, saturationPoint as
+  // efficient/saturated levels. Account level has no LTV: ceiling = caller's or none.
+  hyros_get_marginal_cac_curve: ({ request }) => {
+    const account = String(request.level).toUpperCase() === 'ACCOUNT';
+    const caller = request.cacCeiling !== undefined && request.cacCeiling !== null;
+    const cacCeiling = caller ? Number(request.cacCeiling) : (account ? null : 95);
+    const levels = [20, 45, 70, 95, 120];
+    return {
+      id: request.id, level: request.level, name: account ? null : `Mock ${request.level} ${request.id}`,
+      startDate: request.startDate, endDate: request.endDate,
+      attributionModel: 'FIRST_CLICK', daysSampled: 42, cacCeiling,
+      ceilingBasis: caller ? 'CALLER_PROVIDED' : (account ? null : 'LTV_BREAKEVEN'),
+      ltvWindow: !caller && !account ? '90_days' : null,
+      curve: levels.map((spend, i) => ({ spendPerDay: spend, days: 8, newCustomers: Math.round((spend * 8) / (40 + spend * 0.3)), avgCac: 40 + spend * 0.3, marginalCac: i ? 40 + spend * 0.8 : null })),
+      saturationPoint: cacCeiling === null ? null : { efficientSpendPerDay: 45, saturatedSpendPerDay: 70, reason: 'MARGINAL_CAC_ABOVE_CEILING' },
+      notes: cacCeiling === null ? ['LTV_CEILING_UNAVAILABLE'] : [],
+    };
+  },
   hyros_get_domains: () => ['mock.example.test', 'shop.mock.example.test'],
   hyros_assert_script_presence_on_domain: ({ domains }) => Object.fromEntries(domains.map((d, i) => [d, i ? 'SCRIPT_NOT_FOUND' : 'SCRIPT_FOUND'])),
   hyros_check_tracking_parameters_for_integrations: ({ request }) => ({ result: [{ adName: `${request.type} ad 1`, valid: true }, { adName: `${request.type} ad 2`, valid: false, missing: ['gclid'] }] }),
