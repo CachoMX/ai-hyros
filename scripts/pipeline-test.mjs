@@ -193,6 +193,21 @@ try {
   check('unknown timezone: UTC ranges + a kind error warning naming it', snapMars.ranges.today.start === '2026-09-14' && snapMars.warnings.some((w) => w.kind === 'error' && /timezone Mars\/Olympus not understood, using UTC/.test(w.error)), JSON.stringify(snapMars.warnings));
   mock.reset();
 
+  console.log('\nleadStage is validated against the account stages (docs: unknown name -> 400 on every level)');
+  calls.length = 0;
+  const typoPrefs = { settings: { model: 'LAST_CLICK', windowDays: 0, leadStage: ['Custmer', 'customer', 'Lead'] } };
+  const snapStage = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs: typoPrefs });
+  check('stages fetched once per build, not again inside the CRM', calls.filter((c) => c.name === 'hyros_get_stages').length === 1, String(calls.filter((c) => c.name === 'hyros_get_stages').length));
+  const stageReq = calls.find((c) => c.name === 'hyros_get_attribution_report')?.args.request;
+  check('typo dropped, case-insensitive match kept with the account spelling', JSON.stringify(stageReq?.leadStage) === '["Customer","Lead"]' && JSON.stringify(snapStage.settings.leadStage) === '["Customer","Lead"]', JSON.stringify([stageReq?.leadStage, snapStage.settings.leadStage]));
+  check('the dropped stage is a kind error warning naming it', snapStage.warnings.some((w) => w.kind === 'error' && /Custmer/.test(w.error) && /stage/i.test(w.error)), JSON.stringify(snapStage.warnings.filter((w) => w.kind === 'error')));
+  check('report still built for every level (no 400 storm)', snapStage.ranges['30d'].levels.adset.length === 3 + 4 && snapStage.crm.stages.length === 2, String(snapStage.ranges['30d'].levels.adset.length));
+  calls.length = 0;
+  mock.failNext({ tool: 'hyros_get_stages', status: 500, body: 'stages down' });
+  const snapNoStages = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs: typoPrefs }).catch((e) => e);
+  check('a failed stages call: build survives, saved leadStage kept as-is, warned', !(snapNoStages instanceof Error) && JSON.stringify(snapNoStages.settings.leadStage) === '["Custmer","customer","Lead"]' && snapNoStages.crm.stages.length === 0 && snapNoStages.warnings.some((w) => w.kind === 'error' && /stages/.test(w.error)), snapNoStages?.message || JSON.stringify(snapNoStages?.warnings));
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });

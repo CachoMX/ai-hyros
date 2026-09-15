@@ -92,6 +92,26 @@ export const LEVELS_BY_TYPE = {
 
 export const REPORT_MODELS = ['LAST_CLICK', 'FIRST_CLICK', 'SCIENTIFIC'];
 
+/**
+ * Keep only the saved lead stages the account really has (matched
+ * case-insensitively, stored with the account's spelling); the rest are
+ * reported through `warn` so a typo cannot fail every level.
+ */
+export function validateLeadStage(settings, stages, warn = () => {}) {
+  const byLower = new Map((stages || []).map((s) => [String(s?.name || '').toLowerCase(), s.name]));
+  const kept = [];
+  const dropped = [];
+  for (const name of settings.leadStage) {
+    const hit = byLower.get(name.toLowerCase());
+    if (!hit) dropped.push(name);
+    else if (!kept.includes(hit)) kept.push(hit);
+  }
+  if (dropped.length) {
+    warn(null, 'leadStage', `lead stage${dropped.length > 1 ? 's' : ''} ${dropped.map((d) => `"${d}"`).join(', ')} not in the account's stages (${[...byLower.values()].join(', ') || 'none'}) — ignored`, 'error');
+  }
+  return { ...settings, leadStage: kept };
+}
+
 /** Validate/normalize the saved report settings; unknown values fall to defaults. */
 export function normalizeSettings(raw = {}) {
   const model = REPORT_MODELS.includes(raw?.model) ? raw.model
@@ -234,7 +254,7 @@ function canSyncIncrementally({ previous, prevAt, leadsFrom, leadsTo }) {
 /** A previous sync older than this rebuilds the lead set from scratch. */
 const INCREMENTAL_MAX_AGE_DAYS = 7;
 
-async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null, tz = 'UTC' }) {
+async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null, tz = 'UTC', stages = [] }) {
   // Incremental: when the previous snapshot is recent enough, pull only the
   // leads updated since it was built (a lead's lastUpdatedDate moves on
   // creation too, so new joins are included). Sales/calls/subscriptions have
@@ -256,10 +276,9 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
   // expired cursor or the deadline is reported in sync.truncated rather
   // than passed off as the whole month.
   const paged = { pageSize: 250, deadline };
-  const [leadsPage, salesPage, stagesRaw, callsPage, subsPage] = await Promise.all([
+  const [leadsPage, salesPage, callsPage, subsPage] = await Promise.all([
     callToolPagedInfo('hyros_get_leads', { request: leadsRequest }, { ...paged, maxPages: 4 }),
     callToolPagedInfo('hyros_get_sales', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
-    callToolPaged('hyros_get_stages', { request: {} }, { maxPages: 1, pageSize: 250 }),
     callToolPagedInfo('hyros_get_calls', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
     callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 2 }),
   ]);
@@ -363,7 +382,7 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     sales,
     calls,
     subscriptions,
-    stages: stagesRaw.map((s) => ({ name: s.name, amount: s.amount })),
+    stages: stages.map((s) => ({ name: s.name, amount: s.amount })),
     window: { from: leadsFrom, to: leadsTo },
     sync: { incremental, leadsFetched: fetchedLeads.length, syncedAt: now.toISOString(), truncated },
     totals: {
@@ -393,8 +412,8 @@ export async function buildSnapshot({
 } = {}) {
   const started = Date.now();
   const deadline = started + budgetMs;
-  const settings = normalizeSettings(prefs?.settings);
-  const model = settings.model;
+  const saved = normalizeSettings(prefs?.settings);
+  const model = saved.model;
 
   onProgress('account');
   const user = await callTool('hyros_get_user_info', {});
@@ -452,6 +471,20 @@ export async function buildSnapshot({
   // The account timezone decides what "today" is; a value we cannot read
   // falls back to UTC, but never quietly.
   if (!parseTimezone(tz)) warn(null, null, `timezone ${tz} not understood, using UTC`, 'error');
+
+  // Stages: fetched once (the CRM reuses them) and used to validate the saved
+  // leadStage filter — the API answers 400 for an unknown stage name, which
+  // would fail every level of every range for one typo.
+  onProgress('stages');
+  let stagesRaw = null;
+  try {
+    stagesRaw = await callToolPaged('hyros_get_stages', { request: {} }, { maxPages: 1, pageSize: 250 });
+  } catch (err) {
+    if (err?.name === 'McpNotConfigured' || err?.code === 'auth') throw err;
+    warn(null, 'stages', `stages: ${err.message}`, err?.code === 'rate_limited' ? 'rate_limited' : 'error');
+  }
+  const settings = stagesRaw ? validateLeadStage(saved, stagesRaw, warn) : saved;
+
   const reportable = accounts.filter((acct) => {
     if (LEVELS_BY_TYPE[acct.type]) return true;
     warn(acct, null, `no attribution report level for ad account type ${acct.type}`, 'unsupported');
@@ -536,7 +569,7 @@ export async function buildSnapshot({
     crm = { ...prevCrm, sync: { ...(prevCrm.sync || {}), stale: true, skipped: 'time budget' } };
     warn(null, null, 'CRM not refreshed: time budget (showing the previous sync)', 'time budget');
   } else {
-    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline, tz });
+    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline, tz, stages: stagesRaw || [] });
     crm = built.block;
     for (const note of built.notes) warn(null, 'crm', `CRM ${note}`, 'truncated');
   }
