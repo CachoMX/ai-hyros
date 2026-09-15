@@ -28,6 +28,14 @@ HYROS docs (REST API v1.42, MCP v1.0, Webhooks v1.2).
   updates*, *Diagnostics & support* and *Licence*.
 
 ### Changed
+- The refresh is budgeted for Vercel Fluid compute: `/api/refresh` runs
+  up to **300 s** (`maxDuration` in `api/refresh.js` and `vercel.json`)
+  and a build spends up to 290 s, so a large account can take up to 5
+  minutes to refresh. Every share derives from `REFRESH_MAX_S` in
+  `api/_budget.js`; the daily cron gives each account up to 120 s and
+  keeps refreshing the stalest accounts until the run budget is spent.
+  Hobby projects without Fluid compute must lower `maxDuration` to 60 in
+  `vercel.json` (one line) and `REFRESH_MAX_S` to match.
 - Attribution levels follow the documented per-platform enum (classic
   Google `google_campaign` / `google_ad`, Google V2 `google_v2_adgroup`,
   Snapchat `snapchat_adsquad` / `snapchat_ad`, LinkedIn

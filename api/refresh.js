@@ -14,13 +14,14 @@ import { writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw } from '
 import { McpNotConfigured } from './_mcp.js';
 import { accountFromReq, asAccount, listAccounts, markKeyStatus, noteRefresh, syncClients } from './_accounts.js';
 import { logEvent } from './_log.js';
+import { REFRESH_MAX_S, REFRESH_BUDGET_MS, CRON_BUDGET_MS, CRON_MIN_ACCOUNT_MS, cronAccountBudgetMs } from './_budget.js';
 
-export const maxDuration = 60;
-
-/** Cron: the whole run must fit the function; the last account needs at least this much. */
-const CRON_BUDGET_MS = 55000;
-const CRON_MIN_ACCOUNT_MS = 20000;
-const CRON_ACCOUNT_BUDGET_MS = 50000;
+/**
+ * Vercel function limit (seconds). Also declared in vercel.json so the
+ * platform honours it; both derive from api/_budget.js REFRESH_MAX_S. Hobby
+ * projects without Fluid compute must lower it to 60 there.
+ */
+export const maxDuration = REFRESH_MAX_S;
 
 /** Build + persist one account's snapshot under its own key. */
 async function refreshAccount(accountId, steps, budgetMs) {
@@ -93,15 +94,17 @@ export default async function handler(req, res) {
     }
     const { accounts, skipped } = cronTargets(await listAccounts({ withStatus: true }));
     const done = [...skipped];
+    // Stalest first; each account gets min(what is left, 120 s) and the loop
+    // runs until the budget is spent, so a big agency is spread over runs.
     for (const a of accounts) {
       const left = CRON_BUDGET_MS - (Date.now() - started);
       if (left < CRON_MIN_ACCOUNT_MS) { done.push({ id: a.id, skipped: 'time budget' }); continue; }
       try {
-        const { persisted } = await refreshAccount(a.id, steps, Math.min(CRON_ACCOUNT_BUDGET_MS, left - 5000));
+        const { persisted } = await refreshAccount(a.id, steps, cronAccountBudgetMs(left));
         done.push({ id: a.id, ok: true, persisted });
       } catch (err) { done.push({ id: a.id, ok: false, error: err.message }); }
     }
-    return res.status(200).json({ ok: true, cron: true, ms: Date.now() - started, accounts: done, synced, steps });
+    return res.status(200).json({ ok: true, cron: true, ms: Date.now() - started, budgetMs: CRON_BUDGET_MS, elapsedMs: Date.now() - started, accounts: done, synced, steps });
   }
 
   const accountId = await accountFromReq(req);
@@ -110,7 +113,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { snapshot, persisted } = await refreshAccount(accountId, steps);
+    const { snapshot, persisted } = await refreshAccount(accountId, steps, REFRESH_BUDGET_MS);
 
     res.status(200).json({
       ok: true,

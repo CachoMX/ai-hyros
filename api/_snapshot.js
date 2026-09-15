@@ -20,7 +20,11 @@ import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
 import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd, parseHyrosDate, offsetSuffix } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
 import { TEMPLATE_VERSION } from './_version.js';
+import { REFRESH_BUDGET_MS } from './_budget.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
+
+/** A build with no explicit budget gets the whole refresh budget (api/_budget.js). */
+export const DEFAULT_BUDGET_MS = REFRESH_BUDGET_MS;
 
 // Request the ENTIRE catalog: the `fields` param drives computation (verified
 // empirically — requested fields populate, unrequested come back null), and the
@@ -127,7 +131,7 @@ export function normalizeSettings(raw = {}) {
 
 /** Attribution rows per level per range: 8 pages × 250 before the newest-N warning. */
 const ATTRIBUTION_MAX_PAGES = 8;
-/** Per-call timeout for the attribution report (Vercel kills the function at 60 s; the build budget is 52 s). */
+/** Per-call timeout for the attribution report (one page; the core's share of the budget bounds the whole pull). */
 export const ATTRIBUTION_TIMEOUT_MS = 15000;
 /** Budget kept back for the CRM pull: attribution calls stop when less than this remains. */
 const CRM_RESERVE_MS = 12000;
@@ -426,7 +430,7 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
 /* ---------------- top level ---------------- */
 
 export async function buildSnapshot({
-  now = new Date(), onProgress = () => {}, prefs = null, previous = null, budgetMs = 52000,
+  now = new Date(), onProgress = () => {}, prefs = null, previous = null, budgetMs = DEFAULT_BUDGET_MS,
 } = {}) {
   const started = Date.now();
   const deadline = started + budgetMs;

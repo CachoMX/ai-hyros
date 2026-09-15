@@ -190,11 +190,22 @@ averaged.
   `sourcesTruncated` or `ranges[key].skipped` and the header shows a
   warning. A range marked `skipped` keeps the previous snapshot's rows
   and is labelled stale.
-- **Refresh budget.** One refresh has about 50 s. The daily cron refreshes
-  the **stalest accounts first** and stops when ~55 s are used, so an
-  agency with many clients sees them refreshed over several days; press
-  Refresh on an account to bring it forward. Until `CRON_SECRET` is set
-  the unsigned cron is limited to **one run per hour**.
+- **Refresh budget.** A refresh may take **up to 5 minutes** on a large
+  account: `/api/refresh` runs for at most 300 s (Vercel Fluid compute,
+  the default for new Hobby and Pro projects) and one build spends up to
+  290 s of it — at most 45 % on the attribution report, 30 % on the CRM
+  and the rest (never under 60 s) on the feature steps, so a slow report
+  pull cannot starve the CRM or Tracking Health. The reservations are
+  printed in the refresh `steps` log. The daily cron refreshes the
+  **stalest accounts first**, giving each up to 120 s and continuing until
+  the 290 s run budget is spent, so an agency with many clients sees them
+  refreshed over several runs; press Refresh on an account to bring it
+  forward. Until `CRON_SECRET` is set the unsigned cron is limited to
+  **one run per hour**. Every number derives from `REFRESH_MAX_S` in
+  `api/_budget.js`. **Hobby projects without Fluid compute** are capped at
+  60 s: change the one line in `vercel.json`
+  (`"api/refresh.js": { "maxDuration": 60, … }`) and `REFRESH_MAX_S` to
+  60; every share scales down with it.
 - **Scale Advisor** covers every ad account plus the six biggest ad sets by
   30-day spend; **Tracking Health** checks the script on up to 5 verified
   domains and lists 50 tracking-parameter rows per integration type.
