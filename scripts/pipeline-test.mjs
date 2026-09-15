@@ -149,6 +149,19 @@ try {
   check('stale CRM is a kind "time budget" warning', snapStale.warnings.some((w) => w.kind === 'time budget' && /CRM/.test(w.error)), JSON.stringify(snapStale.warnings));
   mock.reset();
 
+  console.log('\nCRM truncation is flagged, never silent');
+  check('untruncated CRM carries explicit false flags', JSON.stringify(snap.crm.sync.truncated) === '{"leads":false,"sales":false,"calls":false,"subscriptions":false}' && snap.sourcesTruncated === false, JSON.stringify([snap.crm.sync.truncated, snap.sourcesTruncated]));
+  mock.pages('hyros_get_leads', 6, 250);
+  mock.pages('hyros_get_sources', 10, 250);
+  mock.expireCursorOn('hyros_get_sales');
+  mock.pages('hyros_get_sales', 3, 250);
+  const snapTr = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
+  check('leads capped at 1000 and flagged', snapTr.crm.leads.length === 1000 && snapTr.crm.sync.truncated.leads === true, JSON.stringify([snapTr.crm.leads.length, snapTr.crm.sync.truncated]));
+  check('expired sales cursor: first page kept, flagged, refresh survives', snapTr.crm.sales.length === 250 && snapTr.crm.sync.truncated.sales === true, JSON.stringify([snapTr.crm.sales.length, snapTr.crm.sync.truncated]));
+  check('sources truncated at the cap: sourcesTruncated + kind truncated warning', snapTr.sourcesTruncated === true && snapTr.sourceCount === 2000 && snapTr.warnings.some((w) => w.kind === 'truncated' && /sources/.test(w.error)), JSON.stringify([snapTr.sourcesTruncated, snapTr.sourceCount, snapTr.warnings.filter((w) => w.kind === 'truncated')]));
+  check('truncated CRM lists are kind truncated warnings too', snapTr.warnings.some((w) => w.kind === 'truncated' && /leads/.test(w.error)) && snapTr.warnings.some((w) => w.kind === 'truncated' && /sales/.test(w.error) && /expired/.test(w.error)), JSON.stringify(snapTr.warnings.filter((w) => w.kind === 'truncated')));
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });

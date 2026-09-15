@@ -248,17 +248,29 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     ? { updatedFromDate: addDays(prevAt, -1), updatedToDate: leadsTo }
     : { fromDate: leadsFrom, toDate: leadsTo };
 
-  const [leadsRaw, salesRaw, stagesRaw, callsRaw, subsRaw] = await Promise.all([
-    callToolPaged('hyros_get_leads',
-      { request: leadsRequest }, { maxPages: 4, pageSize: 250 }),
-    callToolPaged('hyros_get_sales',
-      { request: { fromDate: leadsFrom, toDate: leadsTo } }, { maxPages: 4, pageSize: 250 }),
+  // Every list is capped (4 × 250, subscriptions 2 × 250) and the cap, an
+  // expired cursor or the deadline is reported in sync.truncated rather
+  // than passed off as the whole month.
+  const paged = { pageSize: 250, deadline };
+  const [leadsPage, salesPage, stagesRaw, callsPage, subsPage] = await Promise.all([
+    callToolPagedInfo('hyros_get_leads', { request: leadsRequest }, { ...paged, maxPages: 4 }),
+    callToolPagedInfo('hyros_get_sales', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 4 }),
     callToolPaged('hyros_get_stages', { request: {} }, { maxPages: 1, pageSize: 250 }),
-    callToolPaged('hyros_get_calls',
-      { request: { fromDate: leadsFrom, toDate: leadsTo } }, { maxPages: 4, pageSize: 250 }),
-    callToolPaged('hyros_get_subscriptions',
-      { request: { fromDate: leadsFrom, toDate: leadsTo } }, { maxPages: 2, pageSize: 250 }),
+    callToolPagedInfo('hyros_get_calls', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 4 }),
+    callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 2 }),
   ]);
+  const leadsRaw = leadsPage.rows;
+  const salesRaw = salesPage.rows;
+  const callsRaw = callsPage.rows;
+  const subsRaw = subsPage.rows;
+  const truncated = {
+    // A merge on top of a truncated base is still truncated.
+    leads: leadsPage.truncated || Boolean(incremental && previous?.crm?.sync?.truncated?.leads),
+    sales: salesPage.truncated, calls: callsPage.truncated, subscriptions: subsPage.truncated,
+  };
+  const truncationErrors = Object.entries({ leads: leadsPage, sales: salesPage, calls: callsPage, subscriptions: subsPage })
+    .filter(([, p]) => p.truncated)
+    .map(([list, p]) => `${list}: showing ${p.rows.length} rows${p.error ? ` (${p.error})` : ' (page cap)'}`);
 
   // Income per lead: the lead object has no revenue field, so join sales by email.
   const incomeByEmail = new Map();
@@ -340,14 +352,14 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     provider: x.provider?.integration?.name || x.provider || null,
   }));
 
-  return {
+  const block = {
     leads,
     sales,
     calls,
     subscriptions,
     stages: stagesRaw.map((s) => ({ name: s.name, amount: s.amount })),
     window: { from: leadsFrom, to: leadsTo },
-    sync: { incremental, leadsFetched: fetchedLeads.length, syncedAt: now.toISOString() },
+    sync: { incremental, leadsFetched: fetchedLeads.length, syncedAt: now.toISOString(), truncated },
     totals: {
       leads: leads.length,
       attributed: leads.filter((l) => l.hasAttribution).length,
@@ -358,6 +370,8 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
       subscriptions: subscriptions.length,
     },
   };
+  // `notes` are the truncation reasons for snapshot.warnings (kind 'truncated').
+  return { block, notes: truncationErrors };
 }
 
 /* ---------------- Scale Advisor: marginal CAC curves ---------------- */
@@ -385,8 +399,8 @@ export async function buildSnapshot({
   }));
 
   onProgress('ad accounts');
-  const accountsBody = await callTool('hyros_get_ad_accounts', { request: { pageSize: 250 } });
-  let accounts = (Array.isArray(accountsBody) ? accountsBody : accountsBody?.result || []);
+  const accountsPage = await callToolPagedInfo('hyros_get_ad_accounts', { request: {} }, { maxPages: 4, pageSize: 250 });
+  let accounts = accountsPage.rows;
 
   const only = (process.env.HYROS_AD_ACCOUNTS || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (only.length) accounts = accounts.filter((a) => only.includes(String(a.id)));
@@ -395,9 +409,10 @@ export async function buildSnapshot({
   const adAccountName = new Map(accounts.map((a) => [String(a.id), a.name]));
 
   onProgress('sources');
-  const sourcesRaw = await callToolPaged('hyros_get_sources',
+  const sourcesPage = await callToolPagedInfo('hyros_get_sources',
     { request: { includeOrganic: true, includeDisregarded: false } },
-    { maxPages: 8, pageSize: 250 });
+    { maxPages: 8, pageSize: 250, deadline: deadline - CRM_RESERVE_MS });
+  const sourcesRaw = sourcesPage.rows;
 
   const sourceById = new Map();
   for (const s of sourcesRaw) {
@@ -513,8 +528,13 @@ export async function buildSnapshot({
     crm = { ...prevCrm, sync: { ...(prevCrm.sync || {}), stale: true, skipped: 'time budget' } };
     warn(null, null, 'CRM not refreshed: time budget (showing the previous sync)', 'time budget');
   } else {
-    crm = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline });
+    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline });
+    crm = built.block;
+    for (const note of built.notes) warn(null, 'crm', `CRM ${note}`, 'truncated');
   }
+  // Sources beyond the cap become "Uncategorised / Unknown" rollup rows, so say so.
+  if (sourcesPage.truncated) warn(null, 'sources', `sources: showing ${sourcesRaw.length} of more${sourcesPage.error ? ` (${sourcesPage.error})` : ''}`, 'truncated');
+  if (accountsPage.truncated) warn(null, 'adAccounts', `ad accounts: showing ${accounts.length} of more`, 'truncated');
 
   // Feature server steps (Scale Advisor, Tracking Health, anything a user
   // adds under public/features/) — best-effort inside the remaining budget.
@@ -539,6 +559,7 @@ export async function buildSnapshot({
     },
     adAccounts: accounts.map((a) => ({ id: String(a.id), name: a.name, type: a.type })),
     sourceCount: sourcesRaw.length,
+    sourcesTruncated: Boolean(sourcesPage.truncated),
     ranges: out,
     crm,
     warnings,
