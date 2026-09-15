@@ -12,6 +12,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TEMPLATE_VERSION } from '../api/_version.js';
 
 // fileURLToPath, not .pathname: on Windows the pathname is "/C:/…", which join() mangles into a 404 for every file.
 const ROOT = fileURLToPath(new URL('../public/', import.meta.url));
@@ -84,10 +85,10 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/data') {
     const account = url.searchParams.get('account') || dev.accounts.find((a) => a.kind !== 'client')?.id || null;
     const acct = dev.accounts.find((a) => a.id === account);
-    if (!acct || !acct.lastRefresh) return json(res, 200, { ok: true, origin: 'none', account, prefs: null, capabilities: { mcpConfigured: Boolean(account), storeConfigured: true }, snapshot: null });
+    if (!acct || !acct.lastRefresh) return json(res, 200, { ok: true, templateVersion: TEMPLATE_VERSION, origin: 'none', account, prefs: null, capabilities: { mcpConfigured: Boolean(account), storeConfigured: true }, snapshot: null });
     const seed = JSON.parse(await readFile(new URL('../data/seed.json', import.meta.url), 'utf8'));
     seed.origin = 'kv';
-    return json(res, 200, { ok: true, origin: 'kv', account, prefs: null, capabilities: { mcpConfigured: true, storeConfigured: true }, snapshot: seed });
+    return json(res, 200, { ok: true, templateVersion: TEMPLATE_VERSION, origin: 'kv', account, prefs: null, capabilities: { mcpConfigured: true, storeConfigured: true }, snapshot: seed });
   }
   if (url.pathname === '/api/drill') {
     return json(res, 200, { ok: false, error: 'dev', message: 'Dev server has no MCP — drill-downs need a deployed API. Demo mode drills work.' });
@@ -116,7 +117,10 @@ const server = createServer(async (req, res) => {
     acct.lastRefresh = new Date().toISOString();
     return json(res, 200, { ok: true, account, persisted: true, ms: 1200, steps: ['dev: served the synthetic seed'], generatedAt: acct.lastRefresh });
   }
-  if (url.pathname === '/api/health') return json(res, 200, { ok: true, setup: dev.state, dev: true });
+  if (url.pathname === '/api/health') {
+    // The real route lists which of the 15 required tools the key cannot see; the stub pretends two are absent.
+    return json(res, 200, { ok: true, setup: dev.state, dev: true, templateVersion: TEMPLATE_VERSION, toolCount: 13, hasAttributionTool: true, missingTools: ['hyros_get_lead_journey', 'hyros_get_lead_clicks'] });
+  }
 
   const rel = url.pathname === '/' ? 'index.html' : normalize(url.pathname).replace(/^(\.\.[/\\])+/, '').replace(/^\//, '');
   try {

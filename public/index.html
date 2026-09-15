@@ -118,6 +118,15 @@
           <p class="sub">Generated on first load and still stored in the database. Paste them into Vercel to harden.</p>
           <button type="button" id="secHardenOpen">Show the secrets</button>
         </div>
+        <div class="setup-block">
+          <h3>Diagnostics</h3>
+          <p class="sub">Copies a small JSON — template version, setup state, storage, account count, the last refresh's steps and warnings, missing MCP tools. Never keys, passwords or emails. Paste it into a problem report.</p>
+          <div class="setup-actions">
+            <button type="button" id="copyDiag">Copy diagnostics</button>
+            <a id="reportProblem" class="setup-link" href="#" target="_blank" rel="noopener">Report a problem</a>
+          </div>
+          <div class="sub" id="diagStatus"></div>
+        </div>
         <div class="setup-block danger">
           <h3>Factory reset</h3>
           <p class="sub">Deletes every account, snapshot, setting and the password from the database. The Vercel project and your HYROS accounts are untouched; the dashboard returns to first-load setup.</p>

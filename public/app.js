@@ -62,9 +62,15 @@ const state = {
   accounts: [],                   // from /api/accounts (ids + labels, never keys)
   setup: null,                    // /api/setup state: needs_storage | needs_setup | ready
   features: [],                   // loaded feature modules (public/features/<id>/), see FEATURES.md
+  templateVersion: null,          // from /api/data (the template this deployment runs)
+  health: null,                   // last /api/health answer (tool list check), for Setup & security
+  lastRefresh: null,              // last Refresh / first build outcome (steps, warnings, error) for diagnostics
 };
 
-const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs']);
+/* Where to report a problem with the template (the docs owner keeps this current). */
+const REPO_URL = 'https://github.com/zssai13/ai-hyros';
+
+const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs', '/api/health']);
 
 /* Demo mode caches: the real snapshot to restore, and both attribution views. */
 let realCache = null;
@@ -167,6 +173,7 @@ function emptySnapshot() {
 async function load() {
   const { body } = await api('/api/data');
   state.origin = body.origin;
+  state.templateVersion = body.templateVersion || state.templateVersion;
   state.capabilities = body.capabilities || {};
   state.serverPrefs = body.prefs || null;
   if (body.account && !state.account) state.account = body.account;
@@ -419,22 +426,103 @@ $('setupHardenBtn').addEventListener('click', async () => {
 $('setupHardenLater').addEventListener('click', () => { hideSetup(); if ($('app').hidden) start(); });
 
 // Setup & security (from the account menu)
+const templateVersion = () => state.templateVersion || state.setup?.templateVersion || state.health?.templateVersion || null;
+
+/** What the tools/list check says, for the facts list. */
+function toolsFact() {
+  const h = state.health;
+  if (!state.accounts.length) return 'no account connected — nothing to check';
+  if (!h) return 'checking…';
+  if (h.error || !Array.isArray(h.missingTools)) return `could not check (${h.message || h.error || 'no answer'})`;
+  if (!h.missingTools.length) return `all ${h.toolCount ?? ''} present`.replace('all  present', 'all present');
+  return `${h.missingTools.length} missing: ${h.missingTools.join(', ')}`;
+}
+
 function renderSecurity() {
   const st = state.setup || {};
   const facts = [
+    ['Template version', templateVersion() || '—'],
     ['Storage', st.storage ? `connected (${st.storeVia})` : 'not set up'],
     ['Password', st.passwordSource === 'kv' ? `set on this dashboard${st.masterPassword ? ' (+ REPORT_PASSWORD master password in Vercel)' : ''}` : 'none'],
     ['Key encryption secret', st.keySecret === 'env' ? 'ACCOUNT_KEY_SECRET in Vercel' : st.keySecret === 'kv' ? 'generated, stored in the database' : 'none'],
     ['Daily refresh', st.cronSecret === 'env' ? 'signed (CRON_SECRET in Vercel)' : 'unsigned — once per hour at most; set CRON_SECRET to sign it'],
     ['HYROS MCP', st.mcpUrl || '—'],
+    ['MCP tools', toolsFact()],
     ['Accounts', String(st.accounts ?? state.accounts.length)],
   ];
   $('setupFacts').innerHTML = facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
   $('setupChangePw').hidden = st.passwordSource !== 'kv';
   $('secHardenBlock').hidden = !st.pendingSecrets;
+  $('reportProblem').href = `${REPO_URL}/issues`;
   $('changePwStatus').textContent = ''; $('resetStatus').textContent = ''; $('resetConfirm').value = ''; $('resetBtn').disabled = true;
+  $('diagStatus').textContent = '';
 }
-$('acctSetupBtn').addEventListener('click', async () => { $('acctPanel').hidden = true; await refreshSetupState(); showSetup('security'); });
+
+/** Ask /api/health which of the tools the app needs the key can see; re-render the facts when it answers. */
+async function loadHealth() {
+  if (!state.key || !state.accounts.length) { state.health = null; return; }
+  try {
+    const { body } = await api('/api/health');
+    state.health = body;
+  } catch (err) {
+    state.health = { ok: false, error: err.code || 'error', message: failureCopy(err) };
+  }
+  if (!$('setupSecurity').hidden) renderSecurity();
+}
+
+/* Anything that looks like an email is dropped from the diagnostics text, whatever field it came from. */
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * The diagnostics JSON: versions, states, counts, the last refresh's steps
+ * and warnings, missing tools. Never keys, passwords or emails — account
+ * labels are emails, so only ids and counts travel.
+ */
+function diagnostics() {
+  const st = state.setup || {};
+  const s = state.demo ? null : state.snapshot;
+  const out = {
+    templateVersion: templateVersion(),
+    at: new Date().toISOString(),
+    setup: st.state || null,
+    storeVia: st.storeVia || null,
+    pendingSecrets: Boolean(st.pendingSecrets),
+    accounts: state.accounts.length,
+    account: state.account || null,
+    demo: state.demo,
+    origin: state.origin,
+    snapshot: s ? {
+      schema: s.schema ?? null, generatedAt: s.generatedAt || null, templateVersion: s.templateVersion || null,
+      adAccounts: (s.adAccounts || []).length, sources: s.sourceCount ?? null, sourcesTruncated: Boolean(s.sourcesTruncated),
+      ranges: Object.fromEntries(Object.entries(s.ranges || {}).map(([k, r]) => [k, r?.skipped ? `skipped: ${r.skipped}` : (r?.unavailable ? 'unavailable' : 'ok')])),
+      crm: { leads: (s.crm?.leads || []).length, sync: s.crm?.sync || null },
+      warnings: (s.warnings || []).map((w) => ({ adAccountId: w.adAccountId, name: w.name, type: w.type, level: w.level, kind: w.kind, error: w.error })),
+      features: state.features.map((f) => ({ id: f.id, block: s[f.id] ? (s[f.id].error ? 'error' : s[f.id].skipped ? `skipped: ${s[f.id].skipped}` : 'ok') : 'absent' })),
+    } : null,
+    lastRefresh: state.lastRefresh,
+    missingTools: Array.isArray(state.health?.missingTools) ? state.health.missingTools : null,
+    health: state.health ? { ok: state.health.ok, toolCount: state.health.toolCount ?? null, error: state.health.error || null } : null,
+    userAgent: navigator.userAgent,
+  };
+  return JSON.stringify(out, null, 2).replace(EMAIL_RE, '<email>');
+}
+
+$('copyDiag').addEventListener('click', async () => {
+  const text = diagnostics();
+  const st = $('diagStatus');
+  const btn = $('copyDiag');
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied'; st.innerHTML = '';
+  } catch {
+    // No clipboard (http, permissions): show it for a manual copy.
+    st.innerHTML = 'Clipboard unavailable — copy it from here:<textarea class="diag-json" readonly></textarea>';
+    st.querySelector('textarea').value = text;
+  }
+  setTimeout(() => { btn.textContent = 'Copy diagnostics'; }, 1500);
+});
+
+$('acctSetupBtn').addEventListener('click', async () => { $('acctPanel').hidden = true; await refreshSetupState(); showSetup('security'); loadHealth(); });
 $('setupClose').addEventListener('click', hideSetup);
 $('secHardenOpen').addEventListener('click', () => showSetup('harden'));
 $('setupChangePw').addEventListener('submit', async (e) => {
@@ -795,6 +883,7 @@ async function firstBuild() {
   btn.disabled = true; btn.textContent = 'Building…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    recordRefresh(body, 'first build');
     if (!body.ok) {
       note(`First build failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
       await loadAccounts();
@@ -806,6 +895,7 @@ async function firstBuild() {
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
     note(`Built in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
   } catch (err) {
+    recordRefresh({ ok: false, code: err.code, message: err.message }, 'first build');
     note(`First build failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = state.demo; btn.textContent = 'Refresh';
@@ -1086,6 +1176,7 @@ $('refreshBtn').addEventListener('click', async () => {
   btn.textContent = 'Refreshing…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    recordRefresh(body, 'refresh');
     if (body.ok) {
       await load();
       renderChrome(); renderRangeChips(); renderReport(); renderCrm();
@@ -1094,12 +1185,25 @@ $('refreshBtn').addEventListener('click', async () => {
       note(`Refresh failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
     }
   } catch (err) {
+    recordRefresh({ ok: false, code: err.code, message: err.message }, 'refresh');
     note(`Refresh failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Refresh';
   }
 });
+
+/** Keep the last refresh outcome (for Copy diagnostics): steps, timing, code — never the snapshot itself. */
+function recordRefresh(body, kind) {
+  state.lastRefresh = {
+    kind, at: new Date().toISOString(), account: state.account || null,
+    ok: Boolean(body?.ok), ms: body?.ms ?? null, persisted: body?.persisted ?? null,
+    code: body?.ok ? null : (body?.code || body?.error || null),
+    message: body?.ok ? null : (body?.message || null),
+    steps: Array.isArray(body?.steps) ? body.steps.slice(-40) : null,
+    counts: body?.counts || null,
+  };
+}
 
 function note(msg, isErr) {
   $('reportNote').innerHTML = `<div class="note${isErr ? ' err' : ''}">${msg}</div>`;

@@ -70,5 +70,54 @@ const ok = (name, cond, extra = '') => check(name, Boolean(cond), true) || (cond
   ok('setup error: plain coded errors pass through unchanged', weak.error === 'weak' && weak.code === 'weak' && weak.message === 'Use at least 8 characters.', JSON.stringify(weak));
 }
 
+/* Handlers end to end: an in-memory KV (same stub the pipeline test uses) and the mock MCP. */
+{
+  const mem = new Map();
+  globalThis.fetch = ((orig) => async (url, opts) => {
+    if (String(url).startsWith('http://kv.local')) {
+      const [cmd, k, v, ...rest] = JSON.parse(opts.body);
+      if (cmd === 'GET') return new Response(JSON.stringify({ result: mem.get(k) ?? null }));
+      if (cmd === 'SET') { mem.set(k, v); return new Response(JSON.stringify({ result: 'OK' })); }
+      if (cmd === 'DEL') { let n = 0; for (const key of [k, v, ...rest].filter(Boolean)) n += mem.delete(key) ? 1 : 0; return new Response(JSON.stringify({ result: n })); }
+      if (cmd === 'SCAN') { const prefix = String(rest[0] || '').replace(/\*$/, ''); return new Response(JSON.stringify({ result: ['0', [...mem.keys()].filter((key) => key.startsWith(prefix))] })); }
+    }
+    return orig(url, opts);
+  })(globalThis.fetch);
+  const PORT = 4323;
+  process.env.KV_REST_API_URL = 'http://kv.local'; process.env.KV_REST_API_TOKEN = 't';
+  process.env.HYROS_MCP_URL = `http://127.0.0.1:${PORT}/mcp`;
+  process.env.ACCOUNT_KEY_SECRET = 'test-secret';
+  delete process.env.REPORT_PASSWORD; delete process.env.HYROS_API_KEY;
+  const { startMock } = await import('./mock-mcp.mjs');
+  const server = await startMock(PORT);
+  const fakeRes = () => ({ code: 200, body: null, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } });
+  const req = (url, headers = {}, method = 'GET', body = undefined) => ({ url, method, headers: { host: 'x', ...headers }, body });
+  const PW = 'correct-horse-battery';
+  try {
+    const { TEMPLATE_VERSION } = await import('../api/_version.js');
+    const setupMod = await import('../api/_setup.js');
+    await setupMod.setPassword(PW);
+    const acc = await import('../api/_accounts.js');
+    const added = await acc.addAccount('client-key-XYZ');
+
+    const health = await import('../api/health.js');
+    ok('health: REQUIRED_TOOLS lists the 15 tools the app needs', Array.isArray(health.REQUIRED_TOOLS) && health.REQUIRED_TOOLS.length === 15 && health.REQUIRED_TOOLS.includes('hyros_get_marginal_cac_curve'));
+    ok('health: missingTools() returns what the list lacks', JSON.stringify(health.missingTools(['hyros_get_user_info', 'hyros_get_leads'])) === JSON.stringify(health.REQUIRED_TOOLS.filter((t) => !['hyros_get_user_info', 'hyros_get_leads'].includes(t))));
+    ok('health: missingTools() is empty for a complete list', health.missingTools(health.REQUIRED_TOOLS).length === 0);
+    let res = fakeRes();
+    await health.default(req('/api/health', { 'x-report-key': PW }), res);
+    ok('health: answers with templateVersion', res.body?.templateVersion === TEMPLATE_VERSION, JSON.stringify(res.body));
+    ok('health: missingTools names the tools the mock MCP does not expose', Array.isArray(res.body?.missingTools) && res.body.missingTools.includes('hyros_get_lead_journey') && res.body.missingTools.includes('hyros_get_lead_clicks') && !res.body.missingTools.includes('hyros_get_user_info'), JSON.stringify(res.body?.missingTools));
+    ok('health: still reports toolCount and the account email', res.body?.toolCount > 0 && res.body?.accountEmail === 'mock@hyros.test' && res.body?.account === added.account.id, JSON.stringify(res.body));
+
+    const data = await import('../api/data.js');
+    res = fakeRes();
+    await data.default(req('/api/data', { 'x-report-key': PW }), res);
+    ok('data: answers with templateVersion', res.body?.ok === true && res.body?.templateVersion === TEMPLATE_VERSION, JSON.stringify(res.body));
+  } finally {
+    server.close();
+  }
+}
+
 console.log(fails ? `\n${fails} FAILURE(S)\n` : '\nAll store + API contract checks pass.\n');
 process.exit(fails ? 1 : 0);

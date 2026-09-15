@@ -677,7 +677,13 @@ button.drill.clip { text-align: left; }
 .setup-guide li { margin-bottom: 6px; }
 .setup-guide b { color: var(--ink); font-weight: 500; }
 .setup-guide code { font-family: var(--mono); font-size: 12px; background: var(--surface-3); padding: 1px 5px; border-radius: 4px; }
-.setup-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.setup-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+.setup-link { font-size: 13px; padding: 0 4px; text-decoration: underline; text-underline-offset: 3px; }
+.diag-json {
+  width: 100%; min-height: 120px; margin-top: 8px; padding: 8px 10px; resize: vertical;
+  font-family: var(--mono); font-size: 11px; line-height: 1.45; color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn);
+}
 .setup-body .gate-err { margin-top: 10px; }
 .setup-body .sub { display: block; margin-top: 10px; font-size: 12px; line-height: 1.5; }
 .linkish {
