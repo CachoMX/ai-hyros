@@ -52,16 +52,22 @@ function viewCtx(id, block, extra = {}) {
 }
 const renders = (fn, ctx) => { try { fn(ctx); return null; } catch (err) { return err; } };
 
-/** A server ctx with a recording callTool; `reply` decides what each tool returns. */
-function serverCtx({ reply = async () => ({}), timeLeft = 20000, env = {}, previous = null } = {}) {
+/**
+ * A server ctx with a recording callTool; `reply` decides what each tool
+ * returns. `timeLeft` is a number or a function (to shrink the budget
+ * mid-step); `timeouts` mirrors the runner's optional `ctx.timeouts`.
+ */
+function serverCtx({ reply = async () => ({}), timeLeft = 20000, env = {}, previous = null, timeouts, snapshot = snap } = {}) {
   const calls = [];
+  const left = typeof timeLeft === 'function' ? timeLeft : () => timeLeft;
   return {
     calls,
     id: 'x', manifest: {},
     callTool: async (name, args, opts) => { calls.push({ name, args, opts }); return reply(name, args); },
     callToolPaged: async (name, args, opts) => { calls.push({ name, args, opts }); return []; },
-    snapshot: snap, previous, deadline: Date.now() + timeLeft, timeLeft: () => timeLeft,
+    snapshot, previous, deadline: Date.now() + left(), timeLeft: left,
     log: () => {}, env, now: new Date('2026-09-14T12:00:00Z'),
+    ...(timeouts ? { timeouts } : {}),
   };
 }
 
@@ -203,6 +209,90 @@ console.log('\nTracking Health: build(ctx)');
   const wrapped = serverCtx({ reply: async (name) => (name === 'hyros_get_domains' ? { result: ['a.test'] } : { result: { 'https://a.test/': 'SCRIPT_FOUND' } }) });
   const w = await buildHealth(wrapped);
   check('assert tool { result: map } is unwrapped', w.scripts['https://a.test/'] === 'SCRIPT_FOUND' && w.errors.length === 0, JSON.stringify(w));
+}
+
+console.log('\nTracking Health: checks contract (per-check status, cost order, slow script timeout, stale carry-forward)');
+{
+  const CHECKS = ['domains', 'script', 'params'];
+  const replyOk = async (name, args) => {
+    if (name === 'hyros_get_domains') return ['a.test', 'b.test'];
+    if (name === 'hyros_assert_script_presence_on_domain') return Object.fromEntries(args.domains.map((d) => [d, 'SCRIPT_FOUND']));
+    return { result: [{ adName: 'x', valid: true }] };
+  };
+  const timeoutErr = (ms) => Object.assign(new Error(`MCP call timed out after ${ms}ms`), { code: 'timeout' });
+  const scriptCall = (c) => c.calls.find((x) => x.name === 'hyros_assert_script_presence_on_domain');
+  const SLOW = { default: 15000, slow: 45000 };
+  const scriptTimesOut = (name, args) => (name === 'hyros_assert_script_presence_on_domain' ? Promise.reject(timeoutErr(45000)) : replyOk(name, args));
+
+  const okCtx = serverCtx({ reply: replyOk, timeLeft: 60000, timeouts: SLOW });
+  const good = await buildHealth(okCtx);
+  check('happy path: checks.{domains,script,params} all ok', CHECKS.every((k) => good.checks?.[k]?.status === 'ok'), JSON.stringify(good.checks));
+  check('every check records ms', CHECKS.every((k) => Number.isFinite(good.checks[k].ms)), JSON.stringify(good.checks));
+  check('params check names the channels it checked', JSON.stringify(good.checks.params.channels) === JSON.stringify({ SEARCH: 'ok', PERFORMANCE_MAX: 'ok' }), JSON.stringify(good.checks.params));
+  const order = okCtx.calls.map((c) => c.name);
+  check('cost order: domains, then both param checks, then the script check last', order[0] === 'hyros_get_domains' && order.at(-1) === 'hyros_assert_script_presence_on_domain' && order.slice(1, -1).every((n) => n === 'hyros_check_tracking_parameters_for_integrations'), order.join(','));
+  check('script check uses ctx.timeouts.slow when the runner offers it', scriptCall(okCtx)?.opts?.timeoutMs === 45000, JSON.stringify(scriptCall(okCtx)?.opts));
+  check('cheap checks keep the default (<= 15 s) timeout', okCtx.calls.filter((c) => c.name !== 'hyros_assert_script_presence_on_domain').every((c) => c.opts?.timeoutMs > 0 && c.opts.timeoutMs <= 15000));
+  check('legacy keys still present (domains, scripts, trackingParams, errors)', Array.isArray(good.domains) && good.scripts && Array.isArray(good.trackingParams) && Array.isArray(good.errors));
+
+  const capCtx = serverCtx({ reply: replyOk, timeLeft: 30000, timeouts: SLOW });
+  await buildHealth(capCtx);
+  check('slow timeout never exceeds timeLeft() - 2 s', scriptCall(capCtx)?.opts?.timeoutMs === 28000, JSON.stringify(scriptCall(capCtx)?.opts));
+  const legacyRunner = serverCtx({ reply: replyOk, timeLeft: 60000 });
+  await buildHealth(legacyRunner);
+  check('runner without ctx.timeouts: script check stays on the 15 s contract', scriptCall(legacyRunner)?.opts?.timeoutMs === 15000, JSON.stringify(scriptCall(legacyRunner)?.opts));
+
+  const to = serverCtx({ reply: scriptTimesOut, timeLeft: 60000, timeouts: SLOW });
+  const timedOut = await buildHealth(to);
+  check('script tool timeout -> checks.script failed', timedOut.checks.script.status === 'failed', JSON.stringify(timedOut.checks.script));
+  check('...with a human reason naming the seconds', /HYROS did not answer within 45s/.test(timedOut.checks.script.reason) && /every domain live/.test(timedOut.checks.script.reason), timedOut.checks.script.reason);
+  check('...params still ok, domains still ok', timedOut.checks.params.status === 'ok' && timedOut.checks.domains.status === 'ok');
+  check('...errors[] carries the same reason for compatibility', timedOut.errors.some((e) => /^script: HYROS did not answer/.test(e)), JSON.stringify(timedOut.errors));
+  check('...skips are not counted as errors', timedOut.errors.length === 1, JSON.stringify(timedOut.errors));
+
+  let afterDomains = false;
+  const tight = serverCtx({ reply: async (name, args) => { afterDomains = true; return replyOk(name, args); }, timeLeft: () => (afterDomains ? 1000 : 20000) });
+  const tightOut = await buildHealth(tight);
+  check('budget gone after domains: only hyros_get_domains was called', tight.calls.map((c) => c.name).join(',') === 'hyros_get_domains', tight.calls.map((c) => c.name).join(','));
+  check('...params skipped with reason "time budget"', tightOut.checks.params.status === 'skipped' && tightOut.checks.params.reason === 'time budget', JSON.stringify(tightOut.checks.params));
+  check('...script skipped with reason "time budget"', tightOut.checks.script.status === 'skipped' && tightOut.checks.script.reason === 'time budget', JSON.stringify(tightOut.checks.script));
+  check('...domains ok', tightOut.checks.domains.status === 'ok');
+
+  let made = 0;
+  const under8 = serverCtx({ reply: async (name, args) => { made += 1; return replyOk(name, args); }, timeLeft: () => (made >= 3 ? 7000 : 20000), timeouts: SLOW });
+  const under8Out = await buildHealth(under8);
+  check('under 8 s left before the script check: skipped, not started', under8Out.checks.script.status === 'skipped' && under8Out.checks.script.reason === 'time budget' && !scriptCall(under8), JSON.stringify(under8Out.checks.script));
+
+  const emptyParams = await buildHealth(serverCtx({ reply: async (name, args) => (name === 'hyros_check_tracking_parameters_for_integrations' ? { result: [] } : replyOk(name, args)) }));
+  check('params ran and found nothing -> status empty', emptyParams.checks.params.status === 'empty', JSON.stringify(emptyParams.checks.params));
+  const noGoogle = serverCtx({ reply: replyOk, snapshot: { ...snap, adAccounts: [{ id: '1', name: 'Meta', type: 'FACEBOOK' }] } });
+  const ng = await buildHealth(noGoogle);
+  check('no Google ad account -> params skipped, no params call', ng.checks.params.status === 'skipped' && /Google/.test(ng.checks.params.reason) && !noGoogle.calls.some((c) => c.name === 'hyros_check_tracking_parameters_for_integrations'), JSON.stringify(ng.checks.params));
+  const noDomains = await buildHealth(serverCtx({ reply: async (name, args) => (name === 'hyros_get_domains' ? [] : replyOk(name, args)) }));
+  check('no verified domains -> domains empty, script skipped with reason', noDomains.checks.domains.status === 'empty' && noDomains.checks.script.status === 'skipped' && /no verified domains/.test(noDomains.checks.script.reason), JSON.stringify(noDomains.checks));
+  const domFail = await buildHealth(serverCtx({ reply: async (name, args) => (name === 'hyros_get_domains' ? Promise.reject(new Error('HTTP 500')) : replyOk(name, args)) }));
+  check('domains tool failure -> domains failed with the message, script skipped', domFail.checks.domains.status === 'failed' && /HTTP 500/.test(domFail.checks.domains.reason) && domFail.checks.script.status === 'skipped', JSON.stringify(domFail.checks));
+  const oneChannelFails = await buildHealth(serverCtx({ reply: async (name, args) => (name === 'hyros_check_tracking_parameters_for_integrations' && args.request.type === 'SEARCH' ? Promise.reject(new Error('boom')) : replyOk(name, args)) }));
+  check('one channel fails, the other answers -> params ok, per-channel status, one error', oneChannelFails.checks.params.status === 'ok' && oneChannelFails.checks.params.channels.SEARCH === 'failed' && oneChannelFails.checks.params.channels.PERFORMANCE_MAX === 'ok' && oneChannelFails.errors.some((e) => /^params SEARCH: boom/.test(e)), JSON.stringify([oneChannelFails.checks.params, oneChannelFails.errors]));
+  const shapeErr = await buildHealth(serverCtx({ reply: async (name, args) => (name === 'hyros_assert_script_presence_on_domain' ? ['SCRIPT_FOUND'] : replyOk(name, args)) }));
+  check('unreadable script reply -> checks.script failed "unexpected reply shape"', shapeErr.checks.script.status === 'failed' && /unexpected reply shape/.test(shapeErr.checks.script.reason), JSON.stringify(shapeErr.checks.script));
+
+  const prevScripts = { 'https://a.test/': 'SCRIPT_FOUND', 'https://b.test/': 'SCRIPT_NOT_FOUND' };
+  const previous = { checkedAt: '2026-08-29T10:00:00Z', domains: ['a.test', 'b.test'], scripts: prevScripts, trackingParams: [], errors: [], checks: { domains: { status: 'ok' }, script: { status: 'ok', ms: 9000 }, params: { status: 'empty' } } };
+  const carry = await buildHealth(serverCtx({ reply: scriptTimesOut, timeLeft: 60000, timeouts: SLOW, previous }));
+  check('script failed + previous completed check: previous per-URL results carried forward', JSON.stringify(carry.scripts) === JSON.stringify(prevScripts), JSON.stringify(carry.scripts));
+  check('...marked stale with the previous checkedAt, status still failed', carry.checks.script.status === 'failed' && carry.checks.script.stale === true && carry.checks.script.checkedAt === previous.checkedAt, JSON.stringify(carry.checks.script));
+  check('...the block itself is fresh (no block-level stale marker, new checkedAt)', carry.stale === undefined && carry.checkedAt !== previous.checkedAt);
+  let after2 = false;
+  const carrySkip = await buildHealth(serverCtx({ reply: async (name, args) => { after2 = true; return replyOk(name, args); }, timeLeft: () => (after2 ? 1000 : 20000), previous: { ...previous, stale: true, skipped: 'time budget' } }));
+  check('script skipped + previous (even runner-marked stale): results carried forward, status skipped', carrySkip.checks.script.status === 'skipped' && carrySkip.checks.script.stale === true && JSON.stringify(carrySkip.scripts) === JSON.stringify(prevScripts), JSON.stringify(carrySkip.checks.script));
+  const carryTwice = await buildHealth(serverCtx({ reply: scriptTimesOut, timeLeft: 60000, timeouts: SLOW, previous: carry }));
+  check('carrying forward twice keeps the ORIGINAL checkedAt', carryTwice.checks.script.checkedAt === previous.checkedAt && JSON.stringify(carryTwice.scripts) === JSON.stringify(prevScripts), JSON.stringify(carryTwice.checks.script));
+  const legacyPrev = { checkedAt: '2026-08-29T10:00:00Z', domains: ['a.test'], scripts: { 'https://a.test/': 'SCRIPT_FOUND' }, trackingParams: [], errors: [] };
+  const carryLegacy = await buildHealth(serverCtx({ reply: scriptTimesOut, timeLeft: 60000, timeouts: SLOW, previous: legacyPrev }));
+  check('previous block from before `checks` existed (has scripts): still carried forward', carryLegacy.checks.script.stale === true && JSON.stringify(carryLegacy.scripts) === JSON.stringify(legacyPrev.scripts), JSON.stringify(carryLegacy.checks.script));
+  const noCarry = await buildHealth(serverCtx({ reply: scriptTimesOut, timeLeft: 60000, timeouts: SLOW, previous: { ...previous, scripts: {}, checks: { ...previous.checks, script: { status: 'failed', reason: 'x' } } } }));
+  check('previous without a completed script check: nothing carried, scripts stays {}', JSON.stringify(noCarry.scripts) === '{}' && noCarry.checks.script.stale === undefined, JSON.stringify(noCarry.checks.script));
 }
 
 console.log('\nTracking Health: view');
