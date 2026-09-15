@@ -49,8 +49,13 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/setup') {
     if (req.method === 'GET') {
       const out = setupState();
+      // Like api/setup.js: before sign-in only what the page needs to pick a screen.
+      if (!authed(url)) {
+        if (url.searchParams.get('secrets')) return json(res, 401, { ok: false, error: 'unauthorized' });
+        return json(res, 200, { ok: true, state: out.state, storage: out.storage, pendingSecrets: out.pendingSecrets });
+      }
+      out.templateVersion = TEMPLATE_VERSION;
       if (url.searchParams.get('secrets')) {
-        if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
         out.secrets = dev.pendingSecrets ? { ACCOUNT_KEY_SECRET: 'dev-generated-account-key-secret-0123456789abcdef', CRON_SECRET: 'dev-generated-cron-secret-0123456789abcdef' } : { ACCOUNT_KEY_SECRET: null, CRON_SECRET: null };
       }
       return json(res, 200, out);

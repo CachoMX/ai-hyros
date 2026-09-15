@@ -114,6 +114,20 @@ const ok = (name, cond, extra = '') => check(name, Boolean(cond), true) || (cond
     res = fakeRes();
     await data.default(req('/api/data', { 'x-report-key': PW }), res);
     ok('data: answers with templateVersion', res.body?.ok === true && res.body?.templateVersion === TEMPLATE_VERSION, JSON.stringify(res.body));
+
+    const setupRoute = await import('../api/setup.js');
+    res = fakeRes();
+    await setupRoute.default(req('/api/setup'), res);
+    ok('setup GET (unauthenticated): only ok, state, storage, pendingSecrets', Object.keys(res.body || {}).sort().join(',') === 'ok,pendingSecrets,state,storage' && res.body.state === 'ready' && res.body.storage === true && res.body.pendingSecrets === true, JSON.stringify(res.body));
+    res = fakeRes();
+    await setupRoute.default(req('/api/setup', { 'x-report-key': PW }), res);
+    ok('setup GET (authenticated): the full object with accounts, storeVia, secret sources, templateVersion', res.body?.accounts === 1 && res.body?.storeVia === 'KV_REST_API_URL' && res.body?.keySecret === 'env' && res.body?.cronSecret === 'kv' && res.body?.templateVersion === TEMPLATE_VERSION && res.body?.mcpUrl, JSON.stringify(res.body));
+    res = fakeRes();
+    await setupRoute.default(req('/api/setup?secrets=1'), res);
+    ok('setup GET ?secrets=1 without the password is refused', res.code === 401 && res.body?.error === 'unauthorized', JSON.stringify(res.body));
+    res = fakeRes();
+    await setupRoute.default(req('/api/setup?secrets=1', { 'x-report-key': PW }), res);
+    ok('setup GET ?secrets=1 with the password returns the pending CRON_SECRET', /^[0-9a-f]{64}$/.test(res.body?.secrets?.CRON_SECRET || ''), JSON.stringify(res.body?.secrets));
   } finally {
     server.close();
   }

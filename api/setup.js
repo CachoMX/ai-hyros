@@ -1,8 +1,11 @@
 /**
  * /api/setup — the self-serve first-run flow.
  *
- *   GET                       setup state (no secrets; unauthenticated so the
- *                             page can show the right screen before sign-in)
+ *   GET                       setup state. Unauthenticated: only { state,
+ *                             storage, pendingSecrets } so the page can pick a
+ *                             screen before sign-in. With the password: the
+ *                             full object (accounts, storeVia, secret sources,
+ *                             mcpUrl, templateVersion).
  *   GET  ?secrets=1           + the generated ACCOUNT_KEY_SECRET / CRON_SECRET
  *                             still held in KV (password-gated; for hardening)
  *   POST {action:'setup', password, apiKey?, agency?}
@@ -19,6 +22,7 @@ import { setupState, setPassword, changePassword, pendingSecrets, harden, factor
 import { probeKey, addAccount } from './_accounts.js';
 import { storeConfigured } from './_store.js';
 import { logEvent } from './_log.js';
+import { TEMPLATE_VERSION } from './_version.js';
 
 /**
  * What the user should DO for each MCP error code (the client maps the same
@@ -79,12 +83,17 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const url = new URL(req.url, `http://${req.headers.host || 'local'}`);
-      const out = { ok: true, ...(await setupState()) };
-      if (url.searchParams.get('secrets')) {
-        const access = await checkAccess(req);
-        if (!access.ok) return deny(res, access);
-        out.secrets = await pendingSecrets();
+      const full = await setupState();
+      const access = await checkAccess(req);
+      const wantSecrets = Boolean(url.searchParams.get('secrets'));
+      if (!access.ok) {
+        if (wantSecrets) return deny(res, access);
+        // Before sign-in the page only needs to pick a screen: no account
+        // count, store variable name, secret sources or MCP URL leave here.
+        return res.status(200).json({ ok: true, state: full.state, storage: full.storage, pendingSecrets: full.pendingSecrets });
       }
+      const out = { ok: true, templateVersion: TEMPLATE_VERSION, ...full };
+      if (wantSecrets) out.secrets = await pendingSecrets();
       return res.status(200).json(out);
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });

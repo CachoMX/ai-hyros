@@ -295,8 +295,16 @@ function showSetup(step, { overlay = false } = {}) {
 
 function hideSetup() { $('setup').hidden = true; $('setup').classList.remove('is-overlay'); }
 
+/**
+ * Re-read the setup state. Signed in, the password travels in the header so
+ * the full object (accounts, storeVia, secret sources) comes back; before
+ * sign-in the route answers only { state, storage, pendingSecrets }.
+ */
 async function refreshSetupState() {
-  try { const res = await fetch(`${location.origin}/api/setup`); state.setup = await res.json(); } catch { /* keep the old state */ }
+  try {
+    const res = await fetch(`${location.origin}/api/setup`, { headers: state.key ? { 'x-report-key': state.key } : {} });
+    state.setup = await res.json();
+  } catch { /* keep the old state */ }
   return state.setup;
 }
 
