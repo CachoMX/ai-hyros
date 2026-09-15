@@ -645,9 +645,9 @@ function buildWarningsLine(s) {
   for (const g of WARNING_GROUPS) {
     const ws = warnings.filter((w) => warningGroup(w) === g);
     if (!ws.length) continue;
-    const names = [...new Set(ws.map((w) => w.name || w.adAccountId || 'ad account'))];
+    const names = [...new Set(ws.map((w) => w.name || w.adAccountId || w.level || 'snapshot'))];
     parts.push(`${plural(names.length, 'ad account')} ${g.label}: ${names.join(', ')}`);
-    details.push(...ws.map((w) => `${w.name || w.adAccountId || 'ad account'}${w.level ? ` (${w.level})` : ''}: ${w.error || g.label}`));
+    details.push(...ws.map((w) => `${w.name || w.adAccountId || w.level || 'snapshot'}${w.level ? ` (${w.level})` : ''}: ${w.error || g.label}`));
   }
   if (s?.sourcesTruncated) {
     parts.push('sources list truncated');

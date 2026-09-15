@@ -107,7 +107,7 @@ const ok = (name, cond, extra = '') => check(name, Boolean(cond), true) || (cond
     let res = fakeRes();
     await health.default(req('/api/health', { 'x-report-key': PW }), res);
     ok('health: answers with templateVersion', res.body?.templateVersion === TEMPLATE_VERSION, JSON.stringify(res.body));
-    ok('health: missingTools names the tools the mock MCP does not expose', Array.isArray(res.body?.missingTools) && res.body.missingTools.includes('hyros_get_lead_journey') && res.body.missingTools.includes('hyros_get_lead_clicks') && !res.body.missingTools.includes('hyros_get_user_info'), JSON.stringify(res.body?.missingTools));
+    ok('health: missingTools is empty now that the mock exposes every required tool', Array.isArray(res.body?.missingTools) && res.body.missingTools.length === 0, JSON.stringify(res.body?.missingTools));
     ok('health: still reports toolCount and the account email', res.body?.toolCount > 0 && res.body?.accountEmail === 'mock@hyros.test' && res.body?.account === added.account.id, JSON.stringify(res.body));
 
     const data = await import('../api/data.js');

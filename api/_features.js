@@ -7,7 +7,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { FEATURES } from '../public/features/registry.js';
-import { callTool, callToolPaged } from './_mcp.js';
+import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
 
 const featureUrl = (id, file) => new URL(`../public/features/${id}/${file}`, import.meta.url);
 
@@ -56,7 +56,7 @@ export async function runFeatureSteps({ snapshot, previous = null, deadline, onP
       if (typeof mod.build !== 'function') throw new Error('server.js must export build(ctx)');
       const ctx = {
         id: m.id, manifest: m,
-        callTool, callToolPaged,
+        callTool, callToolPaged, callToolPagedInfo,
         snapshot, previous: prev,
         deadline: stepDeadline, timeLeft: () => stepDeadline - Date.now(),
         log: (step) => onProgress(`${m.id}: ${step}`),
