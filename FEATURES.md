@@ -154,7 +154,19 @@ ones after it. Returns the block.
 `ranges[key].skipped` when a range was not fetched), `previous` (this
 feature's block from the last snapshot, markers included — use it to sync
 incrementally), `deadline`, `timeLeft()` ms, `log(step)`, `env`
-(`HYROS_CAC_CEILING`, optional), `now`.
+(`HYROS_CAC_CEILING`, optional), `now`, and — on a runner that offers a
+slow lane — `timeouts` (`{ default: 15000, slow: 45000 }` ms, optional).
+
+`ctx.timeouts` exists for the rare call that legitimately needs longer than
+the 15 s contract (Tracking Health's script check, which makes HYROS fetch
+every domain live). Read it defensively: `ctx.timeouts?.slow`, capped at
+`ctx.timeLeft() - 2000` so the call still ends inside the step, and use it
+for ONE call per step, run last so it cannot starve the cheap ones. When
+`ctx.timeouts` is absent the runner has not declared a slow lane and the
+call stays on the 15 s contract — that is what the conformance stub does,
+so the "≤ 15 s" check below still holds for every feature. A step that
+skips or fails such a call should say so in its block (Tracking Health's
+`checks.script`), not leave the tile blank.
 
 Rules: **`ctx.timeLeft()` governs** — check it before the FIRST call and
 before every call after it (a spent budget must mean zero MCP calls; the
@@ -172,6 +184,8 @@ not as a reason to retry inside the step.
 > - ≤ 50 ids / emails / tags per call (`ids`, `emails`, `tags` arrays).
 > - `pageSize` ≤ 250; use `callToolPaged` with `maxPages` for more.
 > - Per-call `timeoutMs` ≤ 15 000; the conformance check fails a larger one.
+>   The only exception is `ctx.timeouts.slow` (above), which a runner grants
+>   explicitly and which the stub never does.
 > - One rate limit **per HYROS account** (every key of the account shares
 >   it, per endpoint) — a feature that hammers one tool slows the core
 >   refresh too. ~8 calls per step is the comfortable range.

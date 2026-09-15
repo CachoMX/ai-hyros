@@ -193,9 +193,13 @@ const TOOLS = {
       notes: cacCeiling === null ? ['LTV_CEILING_UNAVAILABLE'] : [],
     };
   },
+  // Tracking Health. The script check is the slow one on the real MCP (it
+  // fetches every domain live); simulate that with the per-tool latency hook,
+  // e.g. `mock.latencyMs = { hyros_assert_script_presence_on_domain: 20000 }`,
+  // to see the health step time it out and record checks.script.failed.
   hyros_get_domains: () => ['mock.example.test', 'shop.mock.example.test'],
-  hyros_assert_script_presence_on_domain: ({ domains }) => Object.fromEntries(domains.map((d, i) => [d, i ? 'SCRIPT_NOT_FOUND' : 'SCRIPT_FOUND'])),
-  hyros_check_tracking_parameters_for_integrations: ({ request }) => ({ result: [{ adName: `${request.type} ad 1`, valid: true }, { adName: `${request.type} ad 2`, valid: false, missing: ['gclid'] }] }),
+  hyros_assert_script_presence_on_domain: ({ domains = [] }) => Object.fromEntries(domains.map((d, i) => [d, i ? 'SCRIPT_NOT_FOUND' : 'SCRIPT_FOUND'])),
+  hyros_check_tracking_parameters_for_integrations: ({ request = {} }) => ({ result: [{ adName: `${request.type} ad 1`, valid: true }, { adName: `${request.type} ad 2`, valid: false, missing: ['gclid'] }] }),
 };
 
 /**

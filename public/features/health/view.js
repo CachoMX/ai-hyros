@@ -1,8 +1,68 @@
-/** Tracking Health — script presence + tracking parameters. Renders ctx.block into ctx.root. */
+/**
+ * Tracking Health — script presence + tracking parameters. Renders ctx.block
+ * into ctx.root. Every tile and panel says what its check did this refresh
+ * (block.checks: ok | empty | skipped | failed, with the reason), so a "—"
+ * is never left unexplained and no empty state is invented.
+ */
 const SCRIPT_OK = new Set(['SCRIPT_FOUND', 'FOUND', 'OK', 'PRESENT', 'INSTALLED']);
 // snapshot.warnings[].kind -> pill text. Skips are quiet, failures are bad.
 const WARN_LABEL = { unsupported: 'skipped: unsupported', 'time budget': 'skipped: time budget', rate_limited: 'rate limited', truncated: 'truncated', error: 'error' };
 const WARN_BAD = new Set(['rate_limited', 'error']);
+const CHECK_NAME = { domains: 'verified domains', script: 'script presence', params: 'tracking params' };
+const STATUS_PILL = { ok: 'ok', empty: '', skipped: 'warn', failed: 'bad' };
+const SKIP_LINE = {
+  'time budget': 'Skipped this refresh (time budget) — press Refresh again.',
+  'no verified domains': 'No verified domains on this account — add one in HYROS.',
+  'domains check failed': 'Skipped — the domain list could not be fetched (see Check errors).',
+  'no Google ad accounts connected': 'No Google ad accounts connected — nothing to check.',
+};
+const MAX_SUB_CHARS = 48;
+
+/** A failure reason short enough for a KPI sub: the first clause, capped. */
+function shortReason(reason) {
+  const clause = String(reason || '').split(' (')[0].trim();
+  return clause.length > MAX_SUB_CHARS ? `${clause.slice(0, MAX_SUB_CHARS - 1)}…` : clause;
+}
+
+/** The status line for a check that produced no rows to show. */
+function statusLine(check) {
+  if (check.status === 'failed') return `Check failed: ${check.reason || 'unknown error'}`;
+  if (check.status === 'skipped') return SKIP_LINE[check.reason] || `Skipped: ${check.reason || 'unknown reason'}.`;
+  return null;
+}
+
+/** `checks` for a block from before they existed, inferred from its data and error strings. */
+function legacyChecks(h) {
+  const err = (prefix) => (h.errors || []).find((e) => typeof e === 'string' && e.startsWith(prefix));
+  const infer = (has, prefix) => {
+    if (has) return { status: 'ok' };
+    const e = err(prefix);
+    if (!e) return { status: 'empty' };
+    return /skipped \(time budget\)/.test(e) ? { status: 'skipped', reason: 'time budget' } : { status: 'failed', reason: e.slice(prefix.length) };
+  };
+  return {
+    domains: infer((h.domains || []).length, 'domains: '),
+    script: infer(Object.keys(h.scripts || {}).length, 'script: '),
+    params: infer((h.trackingParams || []).length, 'params '),
+  };
+}
+
+/** KPI sub for a check that is not ok, in the tile's mono voice. */
+function checkSub(check, { notRun, emptyText }) {
+  if (notRun) return 'not checked';
+  if (check.status === 'skipped') return check.reason === 'time budget' ? 'skipped: time budget' : (check.reason || 'skipped');
+  if (check.status === 'failed') return `failed: ${shortReason(check.reason)}`;
+  return emptyText;
+}
+
+/** Which channels the params check covered: "checked: A, B" or per-channel outcomes when they differ. */
+function channelsSub(check, fallback) {
+  const entries = Object.entries(check.channels || {});
+  if (!entries.length) return fallback;
+  const ran = (s) => s === 'ok' || s === 'empty';
+  if (entries.every(([, s]) => ran(s))) return `checked: ${entries.map(([t]) => t).join(', ')}`;
+  return entries.map(([t, s]) => `${t} ${ran(s) ? 'checked' : s}`).join(' · ');
+}
 
 /** One pill per distinct warning kind for this ad account (core snapshot.warnings), escaped. */
 function warningPills(adAccount, warnings, esc) {
@@ -14,25 +74,56 @@ function warningPills(adAccount, warnings, esc) {
   }).join('');
 }
 
+const statusRow = (check, esc, text) => `<div class="health-status"><span class="pill ${STATUS_PILL[check.status] || ''}">${esc(check.status)}</span><span class="health-msg">${esc(text)}</span></div>`;
+
+/** "Checks this refresh": one row per check with its status, reason and duration. */
+function checksPanel(checks, h, fmt, esc) {
+  const detail = {
+    domains: checks.domains.status === 'ok' ? `${fmt.int((h.domains || []).length)} verified` : '',
+    script: checks.script.status === 'ok' ? `${fmt.int(Object.keys(h.scripts || {}).length)} URLs fetched` : '',
+    params: checks.params.status === 'ok' || checks.params.status === 'empty' ? channelsSub(checks.params, '') : '',
+  };
+  return `<div class="fpanel"><h3>Checks this refresh</h3>
+    <div class="fhint">what each HYROS check did — a skip is not an error, a failure is</div>
+    ${Object.entries(checks).map(([id, c]) => `<div class="health-row"><span class="pill ${STATUS_PILL[c.status] || ''}">${esc(c.status)}</span><code>${esc(CHECK_NAME[id] || id)}</code>
+      <span class="health-msg">${esc(c.status === 'ok' || c.status === 'empty' ? detail[id] || (c.status === 'empty' ? 'ran, nothing found' : '') : (c.reason || ''))}</span>
+      ${Number.isFinite(c.ms) ? `<span class="sub">${esc(`${(c.ms / 1000).toFixed(1)} s`)}</span>` : ''}</div>`).join('')}
+  </div>`;
+}
+
+/** Every error, full size: a bad pill with the check name, then its message. */
+function errorsPanel(errors, esc) {
+  return `<div class="fpanel health-errors"><h3>Check errors</h3>
+    <div class="fhint">each line is one check's own message from this refresh</div>
+    ${errors.map((e) => { const i = String(e).indexOf(': '); const name = i > 0 ? String(e).slice(0, i) : 'check'; const msg = i > 0 ? String(e).slice(i + 2) : String(e);
+      return `<div class="health-row"><span class="pill bad">${esc(name)}</span><span class="health-msg">${esc(msg)}</span></div>`; }).join('')}
+  </div>`;
+}
+
 export function render(ctx) {
   const { fmt, esc, kpis, snapshot } = ctx;
   const h = ctx.block;
   if (!h) { ctx.root.innerHTML = '<div class="fpanel"><div class="empty">No health check in this snapshot — hit Refresh.</div></div>'; return; }
+  // Only a block with a checkedAt actually ran; a bare { skipped } did not.
+  const notRun = !h.checkedAt;
+  const checks = { ...legacyChecks(h), ...(h.checks || {}) };
   const scripts = Object.entries(h.scripts || {});
   const okCount = scripts.filter(([, st]) => SCRIPT_OK.has(String(st).toUpperCase())).length;
   const paramRows = (h.trackingParams || []).flatMap((p) => (p.rows || []).map((r) => ({ ...r, _type: p.type })));
   const flagged = paramRows.filter((r) => r && (r.valid === false || r.missing || r.ok === false || /missing|invalid/i.test(JSON.stringify(r))));
+  const errors = (h.errors || []).map(String);
   const acct = snapshot.account || {};
   const warnings = Array.isArray(snapshot.warnings) ? snapshot.warnings : [];
-  // The step did not run this refresh (no data at all) vs. ran earlier and is
-  // being shown again (stale). Only a block with a checkedAt actually ran.
-  const notRun = !h.checkedAt;
   const hasGoogle = (snapshot.adAccounts || []).some((a) => /GOOGLE/.test(a.type || ''));
+  const scriptStale = checks.script.stale === true && scripts.length > 0;
   const status = h.skipped
     ? (h.stale
       ? `<br>Skipped this refresh (${esc(h.skipped)}) — showing the previous check${h.checkedAt ? ` from ${esc(fmt.datetime(h.checkedAt))}` : ''}.`
       : `<br>Skipped this refresh (${esc(h.skipped)}) — nothing was checked yet. Hit Refresh again.`)
     : '';
+  const scriptLine = notRun ? 'Not checked this refresh.' : (statusLine(checks.script) || (!(h.domains || []).length ? SKIP_LINE['no verified domains'] : 'No script check result.'));
+  const paramsLine = notRun ? 'Not checked this refresh.' : (!hasGoogle ? SKIP_LINE['no Google ad accounts connected']
+    : (statusLine(checks.params) || (checks.params.status === 'empty' ? 'No ads reported by the check in the last hour.' : 'No check result.')));
 
   ctx.root.innerHTML = `
     <div class="note"><b>Tracking Health.</b> Is the HYROS script actually on your
@@ -42,29 +133,34 @@ export function render(ctx) {
       ${h.error ? `<br><b>Error:</b> ${esc(h.error)}` : ''}${status}
       ${ctx.demo ? ' <span class="pill warn">demo</span>' : ''}</div>
     <div class="kpis">${kpis([
-      { label: 'Verified domains', value: notRun ? '—' : fmt.int((h.domains || []).length), sub: notRun ? 'not checked' : '' },
-      { label: 'Script present', value: scripts.length ? `${okCount} / ${scripts.length}` : '—',
-        cls: scripts.length && okCount < scripts.length ? 'bad' : (scripts.length ? 'good' : ''), sub: 'of domains checked' },
-      { label: 'Ads missing tracking params', value: paramRows.length ? fmt.int(flagged.length) : '—',
-        cls: flagged.length ? 'bad' : (paramRows.length ? 'good' : ''), sub: (h.trackingParams || []).map((p) => p.type).join(', ') || 'no Google channels checked' },
-      { label: 'Check errors', value: notRun ? '—' : fmt.int((h.errors || []).length), cls: (h.errors || []).length ? 'bad' : '' },
+      { label: 'Verified domains', value: notRun ? '—' : fmt.int((h.domains || []).length), sub: notRun ? 'not checked' : (checks.domains.status === 'failed' ? `failed: ${shortReason(checks.domains.reason)}` : '') },
+      { label: 'Script present', value: checks.script.status === 'ok' && scripts.length ? `${okCount} / ${scripts.length}` : '—',
+        cls: checks.script.status === 'ok' && scripts.length ? (okCount < scripts.length ? 'bad' : 'good') : '',
+        sub: checks.script.status === 'ok' && scripts.length ? `of ${fmt.int(scripts.length)} domains checked` : checkSub(checks.script, { notRun, emptyText: 'no result' }) },
+      { label: 'Ads missing tracking params', value: checks.params.status === 'ok' && paramRows.length ? fmt.int(flagged.length) : '—',
+        cls: checks.params.status === 'ok' && paramRows.length ? (flagged.length ? 'bad' : 'good') : '',
+        sub: checks.params.status === 'ok' && paramRows.length ? channelsSub(checks.params, (h.trackingParams || []).map((p) => p.type).join(', '))
+          : (!hasGoogle && !notRun ? 'no Google ad accounts' : checkSub(checks.params, { notRun, emptyText: `${channelsSub(checks.params, 'checked')}: no ads in the last hour` })) },
+      { label: 'Check errors', value: notRun ? '—' : fmt.int(errors.length), cls: errors.length ? 'bad' : '', sub: errors.length ? shortReason(errors[0]) : (notRun ? 'not checked' : 'none') },
     ])}</div>
+    ${notRun ? '' : errors.length ? `<div class="fcols">${checksPanel(checks, h, fmt, esc)}${errorsPanel(errors, esc)}</div>` : checksPanel(checks, h, fmt, esc)}
     <div class="fcols">
       <div class="fpanel"><h3>Script presence</h3>
         <div class="fhint">the universal script, fetched and inspected per URL (up to 5 verified domains)</div>
+        ${scriptStale || (checks.script.status !== 'ok' && !notRun && statusLine(checks.script)) ? statusRow(checks.script, esc, `${statusLine(checks.script) || ''}${scriptStale ? ` Showing the previous check${checks.script.checkedAt ? ` from ${fmt.datetime(checks.script.checkedAt)}` : ''}.` : ''}`) : ''}
         ${scripts.length ? scripts.map(([url, st]) => {
           const ok = SCRIPT_OK.has(String(st).toUpperCase());
           return `<div class="health-row"><code title="${esc(url)}">${esc(url)}</code>
+            ${scriptStale ? `<span class="pill">previous check · ${esc(checks.script.checkedAt ? fmt.datetime(checks.script.checkedAt) : 'earlier refresh')}</span>` : ''}
             <span class="pill ${ok ? 'ok' : 'bad'}">${esc(String(st).toLowerCase().replace(/_/g, ' '))}</span></div>`;
-        }).join('') : `<div class="empty">${notRun ? 'Not checked this refresh.' : ((h.domains || []).length ? 'No script check result.' : 'No verified domains on this account — add one in HYROS to enable the check.')}</div>`}
-        ${(h.errors || []).length ? `<div class="sub" style="margin-top:8px">${esc(h.errors.join(' · '))}</div>` : ''}
+        }).join('') : (statusLine(checks.script) && !notRun ? '' : `<div class="empty">${esc(scriptLine)}</div>`)}
       </div>
       <div class="fpanel"><h3>Account &amp; access</h3>
         <div class="fhint">connected ad accounts and agency relationships (MCP: allowedAccounts / accessibleAccounts)</div>
         ${(snapshot.adAccounts || []).map((a) => `<div class="health-row"><code>${esc(a.name)}</code><span class="pill">${esc(a.type)}</span><span class="sub">${esc(a.id)}</span>${warningPills(a, warnings, esc)}</div>`).join('')}
         ${(acct.managedBy || []).map((a) => `<div class="health-row"><code>managed by ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
         ${(acct.clients || []).map((a) => `<div class="health-row"><code>client ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
-        ${acct.attributionWindowDefault ? `<div class="health-row"><code>account attribution window</code><span class="pill">${acct.attributionWindowDefault} days</span></div>` : ''}
+        ${acct.attributionWindowDefault ? `<div class="health-row"><code>account attribution window</code><span class="pill">${esc(acct.attributionWindowDefault)} days</span></div>` : ''}
       </div>
     </div>
     <div class="fpanel"><h3>Ad link tracking parameters</h3>
@@ -74,6 +170,6 @@ export function render(ctx) {
         const label = r.adName || r.name || r.ad || r.adId || r.id || JSON.stringify(r).slice(0, 80);
         return `<div class="health-row"><span class="pill">${esc(r._type)}</span><code title="${esc(JSON.stringify(r))}">${esc(String(label))}</code>
           <span class="pill ${bad ? 'bad' : 'ok'}">${bad ? 'missing / invalid' : 'ok'}</span></div>`;
-      }).join('') : `<div class="empty">${notRun ? 'Not checked this refresh.' : (hasGoogle ? 'No ads reported by the check in the last hour.' : 'No Google ad accounts connected — nothing to check.')}</div>`}
+      }).join('') : (hasGoogle && !notRun && statusLine(checks.params) ? statusRow(checks.params, esc, paramsLine) : `<div class="empty">${esc(paramsLine)}</div>`)}
     </div>`;
 }
