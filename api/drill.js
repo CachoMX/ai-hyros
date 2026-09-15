@@ -15,25 +15,36 @@
  * source, which is not identical to the attribution-credited count in the
  * table cell (models reassign credit; e.g. a later organic click can take it).
  *
+ * Dates: sales, calls and clicks come back in the legacy
+ * `EEE MMM dd HH:mm:ss zzz yyyy` form (docs); every stored date is ISO.
+ *
  * Always live against the selected account's key. Demo-mode drills are
  * generated in the browser (public/demo.js) and never reach this route.
  */
 import { checkAccess, deny } from './_auth.js';
 import { callTool, runWithKey } from './_mcp.js';
 import { accountFromReq, resolveAccount } from './_accounts.js';
+import { parseHyrosDate } from './_dates.js';
+
+const iso = (v) => parseHyrosDate(v);
+
+/** usdPrice (undocumented, live) first, else the documented price object. */
+const priceOf = (s) => (s?.usdPrice?.price != null
+  ? { amount: Number(s.usdPrice.price) || 0, currency: s.usdPrice.currency || 'USD' }
+  : { amount: Number(s?.price?.price) || 0, currency: s?.price?.currency || null });
 
 const flatSource = (s) => (s ? {
   name: s.name || null,
   tag: s.tag || null,
   organic: Boolean(s.organic),
   ad: s.sourceLinkAd?.name || null,
-  clickDate: s.clickDate || null,
+  clickDate: iso(s.clickDate),
 } : null);
 
 const compactLead = (l) => ({
   email: l.email || '',
   name: [l.firstName, l.lastName].filter(Boolean).join(' ').trim() || null,
-  joined: l.creationDate || null,
+  joined: iso(l.creationDate),
   stage: l.currentStage?.name || null,
   firstSource: flatSource(l.firstSource),
   lastSource: flatSource(l.lastSource),
@@ -68,15 +79,15 @@ async function cohortRecords(metric, tags) {
 
   const records = metric === 'sales'
     ? raw.map((s) => ({
-        date: s.creationDate || null,
+        date: iso(s.creationDate),
         email: s.lead?.email || '',
         name: s.product?.name || null,
-        amount: s.usdPrice?.price ?? s.price?.price ?? 0,
+        ...priceOf(s),
         state: s.refundDate ? 'REFUNDED' : (s.recurring ? 'RECURRING' : null),
         source: s.lastSource?.name || s.firstSource?.name || null,
       }))
     : raw.map((c) => ({
-        date: c.creationDate || null,
+        date: iso(c.creationDate),
         email: c.lead?.email || '',
         name: c.name || c.tag || null,
         amount: null,
@@ -97,25 +108,25 @@ async function liveJourney(email) {
   return {
     lead: compactLead(j.lead || {}),
     sales: (j.sales || []).map((s) => ({
-      date: s.creationDate || null,
-      amount: s.usdPrice?.price ?? s.price?.price ?? 0,
+      date: iso(s.creationDate),
+      ...priceOf(s),
       product: s.product?.name || null,
       firstSource: s.firstSource?.name || null,
       lastSource: s.lastSource?.name || null,
       ad: s.firstSource?.sourceLinkAd?.name || null,
     })),
     calls: (j.calls || []).map((c) => ({
-      date: c.creationDate || null,
+      date: iso(c.creationDate),
       name: c.tag || null,
       qualified: Boolean(c.qualified),
     })),
     journey: (j.journey || []).map((e) => ({
-      type: e.type, date: e.date, name: e.name || e.tag || '',
+      type: e.type, date: iso(e.date), name: e.name || e.tag || '',
       keyword: e.keyword || '', extra: e.extra || null,
       subNames: e.subNames || null,
     })),
     clicks: (clicksBody?.result || []).map((c) => ({
-      date: c.date || null,
+      date: iso(c.date),
       page: c.page || c.trackedUrl || null,
       previousUrl: c.previousUrl || null,
       source: c.sourceLinkName || null,

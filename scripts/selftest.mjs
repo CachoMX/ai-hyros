@@ -142,6 +142,22 @@ console.log('\nTimezones the API may send (userProfile.timezone is a free string
   check('dayEnd with an unknown zone carries no offset', dayEnd('2026-09-14', 'Mars/Olympus'), '2026-09-14T23:59:59');
 }
 
+console.log('\nLegacy dates (docs: sales/calls/subscriptions use EEE MMM dd HH:mm:ss zzz yyyy)');
+{
+  const { parseHyrosDate } = await import('../api/_dates.js');
+  check('ISO input passes through', parseHyrosDate('2026-09-05T12:00:00-05:00'), '2026-09-05T12:00:00-05:00');
+  check('doc example ART -> -03:00', parseHyrosDate('Thu Nov 17 10:51:54 ART 2022'), '2022-11-17T10:51:54-03:00');
+  check('doc example UTC', parseHyrosDate('Thu Jul 02 01:10:33 UTC 2026'), '2026-07-02T01:10:33+00:00');
+  check('EST / PDT abbreviations', `${parseHyrosDate('Wed Sep 02 10:00:00 EST 2026')} ${parseHyrosDate('Wed Sep 02 10:00:00 PDT 2026')}`, '2026-09-02T10:00:00-05:00 2026-09-02T10:00:00-07:00');
+  check('GMT+02:00 style zone', parseHyrosDate('Thu Nov 17 10:51:54 GMT+02:00 2022'), '2022-11-17T10:51:54+02:00');
+  check('unknown zone uses the account offset', parseHyrosDate('Thu Nov 17 10:51:54 XYZ 2022', '-05:00'), '2022-11-17T10:51:54-05:00');
+  check('unknown zone, no fallback: local time, no offset', parseHyrosDate('Thu Nov 17 10:51:54 XYZ 2022'), '2022-11-17T10:51:54');
+  check('single-digit day is zero-padded', parseHyrosDate('Thu Jul 2 01:10:33 UTC 2026'), '2026-07-02T01:10:33+00:00');
+  check('garbage is null', parseHyrosDate('yesterday-ish'), null);
+  check('null is null', parseHyrosDate(null), null);
+  check('empty is null', parseHyrosDate(''), null);
+}
+
 console.log('\nDemo drills (client-side, public/demo.js)');
 {
   const { demoCohort, demoRecords, demoJourney } = await import('../public/demo.js');

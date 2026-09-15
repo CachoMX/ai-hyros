@@ -91,6 +91,60 @@ export function dayEnd(ymd, tz) {
   return `${ymd}T23:59:59${offsetSuffix(tz)}`;
 }
 
+/* ---------------- legacy response dates ---------------- */
+
+const MONTHS = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+
+/**
+ * Zone abbreviations the legacy format carries (`zzz` is a Java short zone
+ * name, which depends on the account's locale). Ambiguous ones (CST, IST,
+ * AMT, …) take their most common reading; anything missing falls back to
+ * the account offset.
+ */
+const ZONES = {
+  UTC: '+00:00', GMT: '+00:00', Z: '+00:00', UT: '+00:00', WET: '+00:00', WEST: '+01:00',
+  BST: '+01:00', IST: '+05:30', CET: '+01:00', CEST: '+02:00', EET: '+02:00', EEST: '+03:00',
+  MSK: '+03:00', SAST: '+02:00', CAT: '+02:00', EAT: '+03:00', WAT: '+01:00',
+  GST: '+04:00', PKT: '+05:00', SGT: '+08:00', HKT: '+08:00', JST: '+09:00', KST: '+09:00',
+  AWST: '+08:00', ACST: '+09:30', AEST: '+10:00', AEDT: '+11:00', NZST: '+12:00', NZDT: '+13:00',
+  EST: '-05:00', EDT: '-04:00', CST: '-06:00', CDT: '-05:00', MST: '-07:00', MDT: '-06:00',
+  PST: '-08:00', PDT: '-07:00', AKST: '-09:00', AKDT: '-08:00', HST: '-10:00',
+  AST: '-04:00', ADT: '-03:00', NST: '-03:30', NDT: '-02:30',
+  ART: '-03:00', BRT: '-03:00', BRST: '-02:00', UYT: '-03:00', CLT: '-04:00', CLST: '-03:00',
+  PYT: '-04:00', PYST: '-03:00', BOT: '-04:00', PET: '-05:00', COT: '-05:00', ECT: '-05:00', VET: '-04:00',
+};
+
+const ISOISH_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}|$)/;
+const LEGACY_RE = /^(?:[A-Za-z]{3},?\s+)?([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\S+)\s+(\d{4})$/;
+const ZONE_OFFSET_RE = /^(?:UTC|GMT)?([+-])(\d{2}):?(\d{2})$/i;
+
+function zoneOffset(zone, fallback) {
+  const key = String(zone || '').toUpperCase();
+  if (ZONES[key]) return ZONES[key];
+  const m = ZONE_OFFSET_RE.exec(key);
+  if (m) return `${m[1]}${m[2]}:${m[3]}`;
+  return fallback || '';
+}
+
+/**
+ * ISO 8601 for a response date: ISO input passes through; the legacy
+ * `EEE MMM dd HH:mm:ss zzz yyyy` form ('Thu Nov 17 10:51:54 ART 2022') is
+ * rebuilt as local time plus the zone's offset (or `fallbackOffset`, e.g.
+ * the account's '-05:00', when the abbreviation is unknown — no suffix when
+ * there is none); anything else is null.
+ */
+export function parseHyrosDate(value, fallbackOffset = '') {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (ISOISH_RE.test(raw)) return raw;
+  const m = LEGACY_RE.exec(raw);
+  if (!m) return null;
+  const month = MONTHS[m[1].toLowerCase()];
+  if (!month) return null;
+  return `${m[7]}-${month}-${pad2(Number(m[2]))}T${m[3]}:${m[4]}:${m[5]}${zoneOffset(m[6], fallbackOffset)}`;
+}
+
 export function addDays(ymd, days) {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);

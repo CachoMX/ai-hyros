@@ -17,7 +17,7 @@
  */
 
 import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
-import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd } from './_dates.js';
+import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd, parseHyrosDate, offsetSuffix } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
@@ -207,8 +207,8 @@ export function buildLevels({ adsetRows, adRows, sourceById, adAccountName }) {
 
 /* ---------------- CRM ---------------- */
 
-/** Flatten the source object the leads tool returns. */
-function flattenSource(src) {
+/** Flatten the source object the leads tool returns; `iso` normalises its date. */
+function flattenSource(src, iso = (v) => v || null) {
   if (!src) return null;
   return {
     name: src.name || null,
@@ -216,8 +216,18 @@ function flattenSource(src) {
     organic: Boolean(src.organic),
     trafficSource: src.trafficSource?.name || null,
     category: src.category?.name || null,
-    clickDate: src.clickDate || null,
+    clickDate: iso(src.clickDate),
   };
+}
+
+/**
+ * Money on a sale/subscription: `usdPrice` (undocumented, sent by the live
+ * MCP) first, else the documented `price` object. Returns { amount, currency }.
+ */
+function priceOf(x) {
+  if (x?.usdPrice?.price != null) return { amount: Number(x.usdPrice.price) || 0, currency: x.usdPrice.currency || 'USD' };
+  if (x?.price && typeof x.price === 'object') return { amount: Number(x.price.price) || 0, currency: x.price.currency || null };
+  return { amount: Number(x?.price) || 0, currency: null };
 }
 
 /**
@@ -295,26 +305,31 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     .filter(([, p]) => p.truncated)
     .map(([list, p]) => `${list}: showing ${p.rows.length} rows${p.error ? ` (${p.error})` : ' (page cap)'}`);
 
-  // Income per lead: the lead object has no revenue field, so join sales by email.
+  // Response dates: leads are ISO, sales/calls/subscriptions use the legacy
+  // `EEE MMM dd HH:mm:ss zzz yyyy` form (docs); store ISO everywhere.
+  const iso = (v) => parseHyrosDate(v, offsetSuffix(tz));
+
+  // Income per lead: the lead object has no revenue field, so join sales by
+  // email. Amounts are summed as reported (usdPrice when present, else the
+  // documented price object) — a mixed-currency account sums face values.
   const incomeByEmail = new Map();
   for (const sale of salesRaw) {
     const email = (sale.lead?.email || '').toLowerCase();
     if (!email) continue;
-    const amount = sale.usdPrice?.price ?? sale.price?.price ?? 0;
-    incomeByEmail.set(email, (incomeByEmail.get(email) || 0) + Number(amount || 0));
+    incomeByEmail.set(email, (incomeByEmail.get(email) || 0) + priceOf(sale).amount);
   }
 
   const fetchedLeads = leadsRaw.map((l) => {
-    const first = flattenSource(l.firstSource);
-    const last = flattenSource(l.lastSource);
+    const first = flattenSource(l.firstSource, iso);
+    const last = flattenSource(l.lastSource, iso);
     return {
       id: l.id,
       email: l.email || '',
       name: [l.firstName, l.lastName].filter(Boolean).join(' ').trim() || null,
-      joined: l.creationDate || null,
-      updated: l.lastUpdatedDate || null,
+      joined: iso(l.creationDate),
+      updated: iso(l.lastUpdatedDate),
       stage: l.currentStage?.name || null,
-      stageDate: l.currentStage?.date || null,
+      stageDate: iso(l.currentStage?.date),
       consent: l.adOptimizationConsent || 'UNSPECIFIED',
       tags: l.tags || [],
       phones: l.phoneNumbers || [],
@@ -340,12 +355,12 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     id: s.id,
     email: s.lead?.email || '',
     leadName: leadName(s.lead),
-    date: s.creationDate || null,
-    amount: s.usdPrice?.price ?? s.price?.price ?? 0,
-    currency: s.usdPrice?.currency || s.price?.currency || 'USD',
+    date: iso(s.creationDate),
+    ...priceOf(s),
     product: s.product?.name || null,
     recurring: Boolean(s.recurring),
     refunded: Boolean(s.refundDate),
+    refundDate: iso(s.refundDate),
     firstSource: srcName(s.firstSource),
     lastSource: srcName(s.lastSource),
   }));
@@ -356,7 +371,7 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     id: c.id,
     email: c.lead?.email || '',
     leadName: leadName(c.lead),
-    date: c.creationDate || null,
+    date: iso(c.creationDate),
     name: c.name || c.tag || null,
     state: c.state || (c.qualified ? 'QUALIFIED' : 'UNQUALIFIED'),
     qualified: Boolean(c.qualified),
@@ -369,9 +384,11 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     id: x.id || x.subscriptionId || null,
     email: x.lead?.email || x.email || '',
     leadName: leadName(x.lead),
-    date: x.startDate || x.creationDate || null,
+    date: iso(x.startDate || x.creationDate),
+    endDate: iso(x.endDate),
     name: x.name || x.planId || null,
-    price: Number(x.usdPrice?.price ?? x.price?.price ?? x.price ?? 0) || 0,
+    price: priceOf(x).amount,
+    currency: priceOf(x).currency,
     periodicity: x.periodicity || null,
     status: x.status || null,
     provider: x.provider?.integration?.name || x.provider || null,

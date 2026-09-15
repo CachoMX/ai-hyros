@@ -93,6 +93,11 @@ try {
   check('non-Meta ad rows keep parentId too', snap.ranges['30d'].levels.ad.some((a) => a.id === '9002-ad-1' && a.parentId === '9002-1'));
 
   check('CRM full sync (no previous)', snap.crm.sync.incremental === false && snap.crm.leads.length === 3);
+  const s1 = snap.crm.sales.find((s) => s.id === 's1');
+  const s2 = snap.crm.sales.find((s) => s.id === 's2');
+  check('sale with usdPrice: amount from usdPrice, currency USD, ISO date kept', s1?.amount === 149 && s1?.currency === 'USD' && s1?.date === '2026-09-05T12:00:00-05:00', JSON.stringify(s1));
+  check('documented sale shape: legacy date normalised to ISO, price.price + price.currency', s2?.date === '2026-07-02T01:10:33-03:00' && s2?.amount === 89 && s2?.currency === 'EUR', JSON.stringify(s2));
+  check('income joined from the documented price object too', snap.crm.leads.find((l) => l.id === 'lead-2')?.income === 89, String(snap.crm.leads.find((l) => l.id === 'lead-2')?.income));
   check('agency relationship captured', snap.account.managedBy[0]?.email === 'agency@example.test');
   check('attribution window default captured', snap.account.attributionWindowDefault === 7);
 
