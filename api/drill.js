@@ -22,7 +22,7 @@
  * generated in the browser (public/demo.js) and never reach this route.
  */
 import { checkAccess, deny } from './_auth.js';
-import { callTool, runWithKey } from './_mcp.js';
+import { callTool, callToolPagedInfo, runWithKey } from './_mcp.js';
 import { accountFromReq, resolveAccount } from './_accounts.js';
 import { parseHyrosDate } from './_dates.js';
 
@@ -68,14 +68,17 @@ const chunk = (arr, n) => {
   return out;
 };
 
+/** Sales/calls per cohort batch: 4 pages of 250 each before the drawer says "newest shown". */
+const BATCH_MAX_PAGES = 4;
+
 async function cohortRecords(metric, tags) {
   const cohort = await cohortLeads(tags);
   const tool = metric === 'sales' ? 'hyros_get_sales' : 'hyros_get_calls';
 
   const batches = await Promise.all(chunk(cohort.ids, 50).map((leadIds) =>
-    callTool(tool, { request: { leadIds, pageSize: 250 } })
-      .then((b) => (Array.isArray(b) ? b : b?.result || []))));
-  const raw = batches.flat();
+    callToolPagedInfo(tool, { request: { leadIds } }, { maxPages: BATCH_MAX_PAGES, pageSize: 250 })));
+  const raw = batches.flatMap((b) => b.rows);
+  const truncated = cohort.truncated || batches.some((b) => b.truncated);
 
   const records = metric === 'sales'
     ? raw.map((s) => ({
@@ -95,17 +98,28 @@ async function cohortRecords(metric, tags) {
         source: c.firstSource?.name || c.lastSource?.name || null,
       }));
 
-  return { records, cohortSize: cohort.ids.length, truncated: cohort.truncated };
+  return { records, cohortSize: cohort.ids.length, truncated };
 }
 
+/** Click history window: bounded (docs recommend a fromDate) but wide enough for a long journey. */
+const CLICKS_LOOKBACK_DAYS = 365;
+
 async function liveJourney(email) {
-  const [journeys, clicksBody] = await Promise.all([
+  const fromDate = new Date(Date.now() - CLICKS_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 19);
+  // The clicks call is best-effort: a failure must not blank the journey.
+  const [journeyRes, clicksRes] = await Promise.allSettled([
     callTool('hyros_get_lead_journey', { emails: [email], includeEvents: true }),
-    callTool('hyros_get_lead_clicks', { request: { email, pageSize: 100 } }),
+    // Docs: `email` is deprecated in favour of `emails`; `fromDate` bounds the search.
+    callTool('hyros_get_lead_clicks', { request: { emails: [email], fromDate, pageSize: 100 } }),
   ]);
+  if (journeyRes.status === 'rejected') throw journeyRes.reason;
+  const journeys = journeyRes.value;
+  const clicksBody = clicksRes.status === 'fulfilled' ? clicksRes.value : null;
+  const clicksError = clicksRes.status === 'rejected' ? String(clicksRes.reason?.message || clicksRes.reason) : null;
   const j = Array.isArray(journeys) ? journeys[0] : null;
   if (!j) return null;
   return {
+    ...(clicksError ? { clicksError } : {}),
     lead: compactLead(j.lead || {}),
     sales: (j.sales || []).map((s) => ({
       date: iso(s.creationDate),

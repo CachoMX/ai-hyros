@@ -363,6 +363,27 @@ try {
   const first = await acc.addAccount('client-key-XYZ');
   check('key encrypted under the generated secret round-trips', (await acc.resolveAccount(first.account.id)).apiKey === 'client-key-XYZ');
   check('default account becomes the first registry account', (await acc.defaultAccountId()) === first.account.id);
+
+  console.log('\nDrill: journey uses emails[] + fromDate, survives a clicks failure; cohort batches paginate');
+  const drill = (await import('../api/drill.js')).default;
+  const drillReq = (qs) => ({ url: `/api/drill?${qs}&key=correct-horse-battery`, headers: { host: 'x' } });
+  calls.length = 0;
+  let dr = fakeRes();
+  await drill(drillReq('email=lead1@example.test'), dr);
+  const clicksReq = calls.find((c) => c.name === 'hyros_get_lead_clicks')?.args.request;
+  check('journey drill answers with the lead, sales and clicks', dr.code === 200 && dr.body?.journey?.lead?.email === 'lead1@example.test' && dr.body.journey.sales.length === 1 && dr.body.journey.clicks.length === 1, JSON.stringify(dr.body));
+  check('clicks requested with emails: [email] (email is deprecated) + a fromDate', JSON.stringify(clicksReq?.emails) === '["lead1@example.test"]' && clicksReq?.email === undefined && /^\d{4}-\d{2}-\d{2}T/.test(clicksReq?.fromDate || ''), JSON.stringify(clicksReq));
+  check('journey dates normalised (legacy click date EST -> -05:00, sale currency carried)', dr.body?.journey?.clicks[0]?.date === '2026-09-02T10:00:00-05:00' && dr.body.journey.sales[0].currency === 'USD' && dr.body.journey.sales[0].amount === 149, JSON.stringify([dr.body?.journey?.clicks, dr.body?.journey?.sales]));
+  mock.failNext({ tool: 'hyros_get_lead_clicks', status: 500, body: 'clicks down' });
+  dr = fakeRes();
+  await drill(drillReq('email=lead1@example.test'), dr);
+  check('a failed clicks call does not blank the journey; the reason is carried', dr.code === 200 && dr.body?.journey?.sales.length === 1 && dr.body.journey.clicks.length === 0 && /HTTP 500/.test(dr.body.journey.clicksError || ''), JSON.stringify(dr.body));
+  mock.pages('hyros_get_sales', 6, 250);
+  dr = fakeRes();
+  await drill(drillReq('tags=@as-1&metric=sales'), dr);
+  check('cohort sales paginate (4 × 250) and surface truncated', dr.code === 200 && dr.body?.records?.length === 1000 && dr.body.truncated === true && dr.body.cohortSize === 1, JSON.stringify([dr.body?.records?.length, dr.body?.truncated, dr.body?.cohortSize]));
+  check('cohort sale records carry ISO dates + currency', /^\d{4}-\d{2}-\d{2}T/.test(dr.body?.records?.[0]?.date || '') && dr.body?.records?.[0]?.currency === 'USD', JSON.stringify(dr.body?.records?.[0]));
+  mock.reset();
   check('accountFromReq: the legacy env id falls to the default', (await acc.accountFromReq({ url: '/api/data?account=env', headers: { host: 'x' } })) === first.account.id);
   const secrets = await setup.pendingSecrets();
   check('pending secrets readable for the hardening screen', /^[0-9a-f]{64}$/.test(secrets.ACCOUNT_KEY_SECRET) && /^[0-9a-f]{64}$/.test(secrets.CRON_SECRET));
