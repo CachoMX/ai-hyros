@@ -51,8 +51,18 @@ export const CRM_SHARE = 0.30;
 export const FEATURES_MIN_MS = 60000;
 /** A feature step gets at least min(this, what is left of the features slot). */
 export const STEP_FLOOR_MS = 60000;
-/** The CRM pull is skipped (previous CRM reused, marked stale) when less than min(this, its slot) remains. */
+/** The CRM pull is skipped (previous CRM reused, marked stale) when less than min(this, a quarter of its slot) remains. */
 export const CRM_MIN_MS = 10000;
+
+/**
+ * Least CRM slot worth starting a pull for. An attribution call started just
+ * before the core deadline may overrun into the CRM slot by up to one call
+ * timeout; below this a partial, honestly truncated pull is still better
+ * than reusing the previous CRM.
+ */
+export function crmMinMs(plan) {
+  return Math.min(CRM_MIN_MS, Math.floor((plan?.crmMs || 0) / 4));
+}
 
 /**
  * Split a build budget into the three reservations. The features slot is

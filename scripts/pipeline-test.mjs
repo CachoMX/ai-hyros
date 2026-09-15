@@ -166,21 +166,53 @@ try {
   check('a kind "time budget" warning names the skipped ranges', snapSlow.warnings.some((w) => w.kind === 'time budget' && /range/.test(w.error)), JSON.stringify(snapSlow.warnings));
   check('CRM still built when there is no previous to reuse', snapSlow.crm.leads.length === 3 && snapSlow.crm.sync.stale === undefined);
   calls.length = 0;
-  const snapStale = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 5000 });
+  const snapStale = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 3000 });
   check('near the deadline the previous CRM is reused, marked stale, no CRM calls', snapStale.crm.sync.stale === true && snapStale.crm.leads.length === 3 && !calls.some((c) => c.name === 'hyros_get_leads'), JSON.stringify({ sync: snapStale.crm.sync, leadsCalls: calls.filter((c) => c.name === 'hyros_get_leads').length }));
   check('stale CRM is a kind "time budget" warning', snapStale.warnings.some((w) => w.kind === 'time budget' && /CRM/.test(w.error)), JSON.stringify(snapStale.warnings));
   mock.reset();
 
+  console.log('\nProportional reservations: core <= 45 %, CRM <= 30 %, features the rest (at least 60 s when the budget allows)');
+  const plan290 = budget.planBudget(290000);
+  check('290 s plan: core 130.5 s, CRM 87 s, features 72.5 s — the core leaves >= 90 s for CRM + features', plan290.coreMs === 130500 && plan290.crmMs === 87000 && plan290.featuresMs === 72500 && 290000 - plan290.coreMs >= 90000, JSON.stringify(plan290));
+  const plan120 = budget.planBudget(120000);
+  check('120 s cron share: features keep the 60 s floor, core : CRM stay 3 : 2 in the rest', plan120.featuresMs === 60000 && plan120.coreMs === 36000 && plan120.crmMs === 24000, JSON.stringify(plan120));
+  check('every plan adds up to the budget; a zero budget plans zeros', [0, 1, 999, 20000, 290000].every((b) => { const p = budget.planBudget(b); return p.coreMs + p.crmMs + p.featuresMs === b; }) && JSON.stringify(budget.planBudget(0)) === '{"budgetMs":0,"coreMs":0,"crmMs":0,"featuresMs":0}');
+  check('the previous CRM is reused only when less than min(10 s, a quarter of the CRM slot) is left (an overrun of one 15 s call on the 120 s cron share still pulls)', budget.crmMinMs(plan290) === 10000 && budget.crmMinMs(plan120) === 6000 && plan120.crmMs - ATTRIBUTION_TIMEOUT_MS >= budget.crmMinMs(plan120), JSON.stringify([budget.crmMinMs(plan290), budget.crmMinMs(plan120)]));
+  mock.adAccounts = [{ id: '9001', name: 'Mock Meta', type: 'FACEBOOK' }];
+  mock.latencyMs = { hyros_get_attribution_report: 1500 };
+  const planRes = budget.planBudget(20000);
+  const resSteps = [];
+  const tRes = Date.now();
+  const snapRes = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 20000, onProgress: (s) => resSteps.push(s) });
+  const resMs = Date.now() - tRes;
+  check('slow attribution stops at the core reservation: a range is skipped and the build ends within core + one overrunning call', Object.values(snapRes.ranges).some((r) => r.skipped === 'time budget') && resMs < planRes.coreMs + ATTRIBUTION_TIMEOUT_MS + 3000, JSON.stringify({ resMs, plan: planRes, ranges: Object.entries(snapRes.ranges).map(([k, r]) => [k, r.skipped || 'ok']) }));
+  check('…and the CRM still runs inside its own reservation (incremental, not stale)', snapRes.crm.sync.stale === undefined && snapRes.crm.sync.incremental === true && snapRes.crm.leads.length >= 3, JSON.stringify(snapRes.crm.sync));
+  check('the reservations are printed in the steps log', resSteps.some((s) => /^budget 20s: core <= 6s, crm <= 4s, features >= 10s$/.test(s)), JSON.stringify(resSteps.filter((s) => /budget/.test(s))));
+  mock.reset();
+
+  console.log('\nCRM completeness: lists page to 10,000 rows, bounded by the CRM reservation');
+  mock.adAccounts = [];
+  mock.pages('hyros_get_calls', 8, 250);
+  calls.length = 0;
+  const snapCalls = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
+  check('8 pages of calls -> 2,000 calls, truncated.calls === false', snapCalls.crm.calls.length === 2000 && snapCalls.crm.sync.truncated.calls === false && snapCalls.crm.totals.calls === 2000, JSON.stringify([snapCalls.crm.calls.length, snapCalls.crm.sync.truncated]));
+  check('calls paged with the previous nextPageId (8 requests)', calls.filter((c) => c.name === 'hyros_get_calls').length === 8, String(calls.filter((c) => c.name === 'hyros_get_calls').length));
+  mock.latencyMs = { hyros_get_calls: 150 };
+  const snapCut = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, budgetMs: 1200 });
+  check('a small budget cuts the pull: truncated.calls === true with the rows fetched so far, a "time budget" note', snapCut.crm.sync.truncated.calls === true && snapCut.crm.calls.length > 0 && snapCut.crm.calls.length < 2000 && snapCut.warnings.some((w) => w.kind === 'truncated' && /calls: showing \d+ rows \(time budget\)/.test(w.error)), JSON.stringify([snapCut.crm.calls.length, snapCut.crm.sync.truncated, snapCut.warnings.filter((w) => /calls/.test(w.error))]));
+  check('lists the deadline did not cut stay untruncated', snapCut.crm.sync.truncated.leads === false && snapCut.crm.sync.truncated.sales === false && snapCut.crm.sync.truncated.subscriptions === false, JSON.stringify(snapCut.crm.sync.truncated));
+  mock.reset();
+
   console.log('\nCRM truncation is flagged, never silent');
   check('untruncated CRM carries explicit false flags', JSON.stringify(snap.crm.sync.truncated) === '{"leads":false,"sales":false,"calls":false,"subscriptions":false}' && snap.sourcesTruncated === false, JSON.stringify([snap.crm.sync.truncated, snap.sourcesTruncated]));
-  mock.pages('hyros_get_leads', 6, 250);
-  mock.pages('hyros_get_sources', 10, 250);
+  mock.pages('hyros_get_leads', 41, 250);
+  mock.pages('hyros_get_sources', 41, 250);
   mock.expireCursorOn('hyros_get_sales');
   mock.pages('hyros_get_sales', 3, 250);
   const snapTr = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
-  check('leads capped at 1000 and flagged', snapTr.crm.leads.length === 1000 && snapTr.crm.sync.truncated.leads === true, JSON.stringify([snapTr.crm.leads.length, snapTr.crm.sync.truncated]));
+  check('leads capped at 10,000 (40 pages) and flagged only because the API had more', snapTr.crm.leads.length === 10000 && snapTr.crm.sync.truncated.leads === true, JSON.stringify([snapTr.crm.leads.length, snapTr.crm.sync.truncated]));
   check('expired sales cursor: first page kept, flagged, refresh survives', snapTr.crm.sales.length === 250 && snapTr.crm.sync.truncated.sales === true, JSON.stringify([snapTr.crm.sales.length, snapTr.crm.sync.truncated]));
-  check('sources truncated at the cap: sourcesTruncated + kind truncated warning', snapTr.sourcesTruncated === true && snapTr.sourceCount === 2000 && snapTr.warnings.some((w) => w.kind === 'truncated' && /sources/.test(w.error)), JSON.stringify([snapTr.sourcesTruncated, snapTr.sourceCount, snapTr.warnings.filter((w) => w.kind === 'truncated')]));
+  check('sources truncated at the 40-page cap: sourcesTruncated + kind truncated warning', snapTr.sourcesTruncated === true && snapTr.sourceCount === 10000 && snapTr.warnings.some((w) => w.kind === 'truncated' && /sources/.test(w.error)), JSON.stringify([snapTr.sourcesTruncated, snapTr.sourceCount, snapTr.warnings.filter((w) => w.kind === 'truncated')]));
   check('truncated CRM lists are kind truncated warnings too', snapTr.warnings.some((w) => w.kind === 'truncated' && /leads/.test(w.error)) && snapTr.warnings.some((w) => w.kind === 'truncated' && /sales/.test(w.error) && /expired/.test(w.error)), JSON.stringify(snapTr.warnings.filter((w) => w.kind === 'truncated')));
   mock.reset();
 

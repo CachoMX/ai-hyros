@@ -180,11 +180,14 @@ averaged.
   clients share one budget. On `429` the app waits for `Retry-After` and
   retries inside its time budget; what still cannot be fetched is recorded
   as a `rate_limited` warning, never as a failed key.
-- **CRM lists.** Leads, sales and calls are pulled up to 1,000 per 30-day
-  window (subscriptions 500). Past that the CRM shows **"1,000+"** and
-  `crm.sync.truncated` is set; the newest rows are the ones kept.
-  Leads sync incrementally when the previous snapshot's window overlaps
-  the new one; sales, calls and subscriptions are full pulls.
+- **CRM lists.** Leads, sales, calls and subscriptions are pulled up to
+  **10,000 rows each** (40 pages of 250) per 30-day window, in parallel,
+  inside the CRM's share of the refresh budget. `crm.sync.truncated.<list>`
+  is set only when the API still had more rows at the cap, a pagination
+  cursor expired, or the deadline cut the pull; the CRM then shows the
+  count with a **"+"** and keeps the newest rows. Leads sync incrementally
+  when the previous snapshot's window overlaps the new one; sales, calls
+  and subscriptions are full pulls. Sources page to 10,000 as well.
 - **Sources and attribution rows** are paginated within the refresh
   budget; when the budget runs out the snapshot carries
   `sourcesTruncated` or `ranges[key].skipped` and the header shows a

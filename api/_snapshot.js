@@ -20,7 +20,7 @@ import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
 import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd, parseHyrosDate, offsetSuffix } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
 import { TEMPLATE_VERSION } from './_version.js';
-import { REFRESH_BUDGET_MS } from './_budget.js';
+import { REFRESH_BUDGET_MS, planBudget, crmMinMs, clampTimeout } from './_budget.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
 /** A build with no explicit budget gets the whole refresh budget (api/_budget.js). */
@@ -133,10 +133,13 @@ export function normalizeSettings(raw = {}) {
 const ATTRIBUTION_MAX_PAGES = 8;
 /** Per-call timeout for the attribution report (one page; the core's share of the budget bounds the whole pull). */
 export const ATTRIBUTION_TIMEOUT_MS = 15000;
-/** Budget kept back for the CRM pull: attribution calls stop when less than this remains. */
-const CRM_RESERVE_MS = 12000;
-/** A call is never started with less than this on the clock. */
-const MIN_CALL_MS = 1000;
+/**
+ * Page caps are bounded by the deadline, not by a small number: 40 × 250 =
+ * 10,000 rows per list. `truncated` is only ever true when the API still
+ * had a nextPageId at the cap, the cursor expired, or the deadline cut in.
+ */
+const SOURCES_MAX_PAGES = 40;
+const CRM_MAX_PAGES = 40;
 
 /**
  * One level of one ad account for one range, paged to completion (or to the
@@ -287,15 +290,16 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
     ? { updatedFromDate: dayStart(addDays(prevAt, -1), tz), updatedToDate: to }
     : { fromDate: from, toDate: to };
 
-  // Every list is capped (4 × 250, subscriptions 2 × 250) and the cap, an
+  // The four lists page in parallel up to CRM_MAX_PAGES (10,000 rows each)
+  // and every one stops at `deadline` (the CRM's reservation); the cap, an
   // expired cursor or the deadline is reported in sync.truncated rather
   // than passed off as the whole month.
-  const paged = { pageSize: 250, deadline };
+  const paged = { pageSize: 250, deadline, maxPages: CRM_MAX_PAGES };
   const [leadsPage, salesPage, callsPage, subsPage] = await Promise.all([
-    callToolPagedInfo('hyros_get_leads', { request: leadsRequest }, { ...paged, maxPages: 4 }),
-    callToolPagedInfo('hyros_get_sales', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
-    callToolPagedInfo('hyros_get_calls', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
-    callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 2 }),
+    callToolPagedInfo('hyros_get_leads', { request: leadsRequest }, paged),
+    callToolPagedInfo('hyros_get_sales', { request: { fromDate: from, toDate: to } }, paged),
+    callToolPagedInfo('hyros_get_calls', { request: { fromDate: from, toDate: to } }, paged),
+    callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: from, toDate: to } }, paged),
   ]);
   const leadsRaw = leadsPage.rows;
   const salesRaw = salesPage.rows;
@@ -433,7 +437,17 @@ export async function buildSnapshot({
   now = new Date(), onProgress = () => {}, prefs = null, previous = null, budgetMs = DEFAULT_BUDGET_MS,
 } = {}) {
   const started = Date.now();
-  const deadline = started + budgetMs;
+  // Proportional reservations (api/_budget.js): the core (account, sources,
+  // attribution ranges) may use up to `coreMs`, the CRM pull the next
+  // `crmMs`, and the feature steps get the rest plus whatever the two before
+  // them did not spend. A slow attribution pull therefore never starves the
+  // CRM or Tracking Health.
+  const plan = planBudget(budgetMs);
+  const deadline = started + plan.budgetMs;
+  const coreDeadline = started + plan.coreMs;
+  const crmDeadline = coreDeadline + plan.crmMs;
+  const secs = (ms) => `${Math.round(ms / 1000)}s`;
+  onProgress(`budget ${secs(plan.budgetMs)}: core <= ${secs(plan.coreMs)}, crm <= ${secs(plan.crmMs)}, features >= ${secs(plan.featuresMs)}`);
   const saved = normalizeSettings(prefs?.settings);
   const model = saved.model;
 
@@ -459,7 +473,7 @@ export async function buildSnapshot({
   onProgress('sources');
   const sourcesPage = await callToolPagedInfo('hyros_get_sources',
     { request: { includeOrganic: true, includeDisregarded: false } },
-    { maxPages: 8, pageSize: 250, deadline: deadline - CRM_RESERVE_MS });
+    { maxPages: SOURCES_MAX_PAGES, pageSize: 250, deadline: coreDeadline });
   const sourcesRaw = sourcesPage.rows;
 
   const sourceById = new Map();
@@ -512,12 +526,11 @@ export async function buildSnapshot({
     warn(acct, null, `no attribution report level for ad account type ${acct.type}`, 'unsupported');
     return false;
   });
-  // Time budget. Attribution calls stop when the CRM reserve is reached;
-  // a call never runs past the overall deadline (its timeout shrinks).
-  const reserveMs = Math.min(CRM_RESERVE_MS, Math.floor(budgetMs / 4));
-  const coreDeadline = deadline - reserveMs;
+  // Time budget. Attribution calls stop at the core's reservation; a call
+  // started just before it may overrun into the CRM slot (its timeout
+  // shrinks so it never reaches the features slot).
   const outOfTime = () => Date.now() >= coreDeadline;
-  const callTimeout = () => Math.min(ATTRIBUTION_TIMEOUT_MS, Math.max(MIN_CALL_MS, deadline - Date.now()));
+  const callTimeout = () => clampTimeout(ATTRIBUTION_TIMEOUT_MS, crmDeadline);
 
   const fetchLevelSafe = async (acct, level, range) => {
     const id = String(acct.id);
@@ -584,14 +597,15 @@ export async function buildSnapshot({
   const today = ymdInTz(now, tz);
   const prevCrm = previous?.crm;
   let crm;
-  if (Array.isArray(prevCrm?.leads) && deadline - Date.now() < reserveMs) {
-    // Not enough budget for a CRM pull: keep the last one, marked stale, so
-    // the tab never goes blank. Its sync.syncedAt stays the real sync time,
-    // which is what the next incremental pull is based on.
+  if (Array.isArray(prevCrm?.leads) && crmDeadline - Date.now() < crmMinMs(plan)) {
+    // The core overran into the CRM slot and too little of it is left for a
+    // pull: keep the last one, marked stale, so the tab never goes blank.
+    // Its sync.syncedAt stays the real sync time, which is what the next
+    // incremental pull is based on.
     crm = { ...prevCrm, sync: { ...(prevCrm.sync || {}), stale: true, skipped: 'time budget' } };
     warn(null, null, 'CRM not refreshed: time budget (showing the previous sync)', 'time budget');
   } else {
-    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline, tz, stages: stagesRaw || [] });
+    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline: crmDeadline, tz, stages: stagesRaw || [] });
     crm = built.block;
     for (const note of built.notes) warn(null, 'crm', `CRM ${note}`, 'truncated');
   }

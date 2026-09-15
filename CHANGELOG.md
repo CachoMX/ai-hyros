@@ -36,6 +36,14 @@ HYROS docs (REST API v1.42, MCP v1.0, Webhooks v1.2).
   keeps refreshing the stalest accounts until the run budget is spent.
   Hobby projects without Fluid compute must lower `maxDuration` to 60 in
   `vercel.json` (one line) and `REFRESH_MAX_S` to match.
+- One build is split into proportional reservations — attribution report
+  at most 45 %, CRM at most 30 %, feature steps the rest and never under
+  60 s — printed in the refresh `steps` log; a slow report pull no longer
+  starves the CRM or Tracking Health.
+- CRM lists (leads, sales, calls, subscriptions) and sources page up to
+  10,000 rows each (was 1,000 / 500), bounded by the deadline;
+  `crm.sync.truncated.<list>` is true only when the API had more rows, a
+  cursor expired or the deadline cut the pull.
 - Attribution levels follow the documented per-platform enum (classic
   Google `google_campaign` / `google_ad`, Google V2 `google_v2_adgroup`,
   Snapchat `snapchat_adsquad` / `snapchat_ad`, LinkedIn
