@@ -2,7 +2,15 @@
 export function render(ctx) {
   const { fmt, esc, kpis } = ctx;
   const f = ctx.block;
-  if (!f) { ctx.root.innerHTML = '<div class="fpanel"><div class="empty">No funnel data in this snapshot.</div></div>'; return; }
+  // Demo-only feature: a block without stages ({ error }, { skipped }, {}) renders a status, never throws.
+  if (!f || typeof f !== 'object' || !Array.isArray(f.stages) || !f.stages.length) {
+    const why = f?.error ? `Error: ${esc(f.error)}`
+      : f?.skipped ? `${f.stale ? 'Showing nothing from the previous refresh — ' : ''}skipped this refresh (${esc(f.skipped)}).`
+        : 'No funnel data in this snapshot.';
+    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${why}</div></div>`;
+    return;
+  }
+  const status = f.stale && f.skipped ? `<br><b>Showing the previous result</b> — skipped this refresh: ${esc(f.skipped)}.` : '';
   const top = f.stages[0].value || 1;
   const customers = f.stages[f.stages.length - 1].value;
 
@@ -33,7 +41,7 @@ export function render(ctx) {
   ctx.root.innerHTML = `
     <div class="note"><b>Demo feature.</b> Funnel breakdown and customer journeys assembled from
       the tracked click stream — shown with demo data as an example of what the HYROS data can
-      power. Window: last 30 days.</div>
+      power. Window: last 30 days.${status}</div>
     <div class="kpis">${kpis([
       { label: 'Visitors → Customers', value: `${((customers / top) * 100).toFixed(2)}%`, sub: 'end-to-end conversion' },
       { label: 'Avg touches to convert', value: f.avgTouches.toFixed(1), sub: 'ad + organic clicks per customer' },

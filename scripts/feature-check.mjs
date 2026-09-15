@@ -6,9 +6,13 @@
  *   - required files exist for what the manifest declares; SPEC.md present
  *   - view.js exports render(); demo.js exports demo(); server.js exports build()
  *   - no feature file imports app.js or api/ (features use ctx only)
- *   - render() runs against the demo snapshot with a stub DOM without throwing
- *   - demo() is deterministic (two runs, same JSON)
- *   - server.js build() runs against a fake callTool without throwing
+ *   - render() runs against the demo snapshot, a missing block, and every
+ *     runner state ({ skipped }, { error }, stale reuse, {}) without throwing;
+ *     a stale block must say "previous"
+ *   - demo() is deterministic (two runs, same JSON) and the block stays small
+ *   - server.js build() runs against a fake callTool without throwing, calls
+ *     only manifest tools (stub run + callTool('…') literals), keeps per-call
+ *     timeouts <= 15 s, and makes zero calls when the budget is spent
  * Folders starting with "_" (the template) are skipped.
  */
 import { readFile, readdir, stat } from 'node:fs/promises';
@@ -16,6 +20,9 @@ import { FEATURES } from '../public/features/registry.js';
 import { loadFeatures, validateManifest, applyDemoFeatures } from '../public/shared/features.js';
 import { buildDemoSnapshot } from '../public/demo.js';
 import { fmt, formatCell } from '../public/shared/metrics.js';
+
+const MAX_BLOCK_BYTES = 200 * 1024;   // FEATURES.md block size guideline
+const MAX_CALL_TIMEOUT_MS = 15000;    // FEATURES.md per-call timeout rule
 
 let failures = 0;
 const check = (name, ok, extra = '') => { console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `  ${extra}`}`); if (!ok) failures += 1; };
@@ -80,26 +87,56 @@ for (const id of FEATURES) {
   try { f.view.render(emptyCtx); } catch (err) { emptyErr = err; }
   check('render(ctx) tolerates a missing block', !emptyErr && emptyCtx.root.innerHTML.length > 0, emptyErr?.message);
 
+  // Every state the runner can hand a view (FEATURES.md "The block"): bare
+  // skipped, error, stale reuse of the previous data, and an empty object.
+  const demoBlock = demoSnap[id] && typeof demoSnap[id] === 'object' ? demoSnap[id] : {};
+  const states = [
+    ['{ skipped }', { skipped: 'time budget' }],
+    ['{ error }', { error: 'boom' }],
+    ['stale', { ...demoBlock, stale: true, skipped: 'time budget' }],
+    ['{}', {}],
+  ];
+  for (const [label, blk] of states) {
+    const c = { ...ctx, root: stubRoot(), block: blk };
+    let e = null;
+    try { f.view.render(c); } catch (err) { e = err; }
+    check(`render(ctx) tolerates a ${label} block`, !e && c.root.innerHTML.length > 0, e?.message || 'empty HTML');
+    if (blk.stale) check('stale block says it is from a previous refresh', /previous/i.test(c.root.innerHTML));
+  }
+  if (m.demo) {
+    const size = JSON.stringify(demoSnap[id] ?? null).length;
+    check('demo block stays under the 200 KB size guideline (FEATURES.md)', size <= MAX_BLOCK_BYTES, `${Math.round(size / 1024)} KB`);
+  }
+
   if (m.server) {
     const mod = await import(new URL('server.js', dir(id)).href);
     check('server.js exports build(ctx)', typeof mod.build === 'function');
+    // Tool names written as string literals must be in the manifest even when
+    // the stub run never reaches that call (a branch the demo snapshot skips).
+    const serverSrc = (await readFile(new URL('server.js', dir(id)), 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const literals = [...serverSrc.matchAll(/callTool(?:Paged)?\(\s*['"]([^'"]+)['"]/g)].map((x) => x[1]);
+    check('every callTool(\'…\') literal in server.js is in the manifest tools', literals.every((t) => (m.tools || []).includes(t)), [...new Set(literals)].filter((t) => !(m.tools || []).includes(t)).join(','));
     if (typeof mod.build === 'function') {
       const calls = [];
       const sctx = {
         id, manifest: m,
-        callTool: async (name, args) => { calls.push(name); return {}; },
-        callToolPaged: async (name) => { calls.push(name); return []; },
+        callTool: async (name, args, opts) => { calls.push({ name, opts }); return {}; },
+        callToolPaged: async (name, args, opts) => { calls.push({ name, opts }); return []; },
         snapshot: demoSnap, previous: null, deadline: Date.now() + 20000, timeLeft: () => 20000,
         log: () => {}, env: {}, now: new Date(),
       };
       let out = null; let err = null;
       try { out = await mod.build(sctx); } catch (e) { err = e; }
       check('build(ctx) runs against a stub MCP', !err && out && typeof out === 'object', err?.message);
-      check('build(ctx) only calls tools the manifest lists', calls.every((c) => (m.tools || []).includes(c)), [...new Set(calls)].filter((c) => !(m.tools || []).includes(c)).join(','));
-      const tight = { ...sctx, deadline: Date.now(), timeLeft: () => 0 };
-      let tErr = null;
-      try { await mod.build(tight); } catch (e) { tErr = e; }
-      check('build(ctx) honours a spent time budget without throwing', !tErr, tErr?.message);
+      const names = calls.map((c) => c.name);
+      check('build(ctx) only calls tools the manifest lists', names.every((c) => (m.tools || []).includes(c)), [...new Set(names)].filter((c) => !(m.tools || []).includes(c)).join(','));
+      check('build(ctx) keeps every per-call timeout <= 15 s', calls.every((c) => !c.opts?.timeoutMs || c.opts.timeoutMs <= MAX_CALL_TIMEOUT_MS), JSON.stringify(calls.filter((c) => c.opts?.timeoutMs > MAX_CALL_TIMEOUT_MS)));
+      const tightCalls = [];
+      const tight = { ...sctx, callTool: async (name) => { tightCalls.push(name); return {}; }, callToolPaged: async (name) => { tightCalls.push(name); return []; }, deadline: Date.now(), timeLeft: () => 0 };
+      let tErr = null; let tOut = null;
+      try { tOut = await mod.build(tight); } catch (e) { tErr = e; }
+      check('build(ctx) honours a spent time budget without throwing', !tErr && tOut && typeof tOut === 'object', tErr?.message);
+      check('build(ctx) makes ZERO MCP calls when timeLeft() is 0', tightCalls.length === 0, tightCalls.join(','));
     }
   }
 }

@@ -261,11 +261,11 @@ console.log('\nTemplate, Funnel, Ad LTV: block states');
 // ---------------------------------------------------------------------------
 console.log('\nManifest rule: live tabs need a server step');
 {
-  const base = { id: 'x', name: 'X', tab: 'X', version: '1.0.0', description: 'd' };
-  check('mode live without server is rejected (the tab could never show)', validateManifest({ ...base, mode: 'live', server: false, needs: ['ranges.30d'] }, 'x').length > 0);
-  check('mode both with demo but without server is rejected', validateManifest({ ...base, mode: 'both', demo: true, server: false, needs: ['ranges.30d'] }, 'x').length > 0);
-  check('mode both with demo + server is valid', validateManifest({ ...base, mode: 'both', demo: true, server: true }, 'x').length === 0, validateManifest({ ...base, mode: 'both', demo: true, server: true }, 'x').join('; '));
-  check('mode demo without server is valid', validateManifest({ ...base, mode: 'demo', demo: true, server: false }, 'x').length === 0);
+  const base = { id: 'xx', name: 'X', tab: 'X', version: '1.0.0', description: 'd' };
+  check('mode live without server is rejected (the tab could never show)', validateManifest({ ...base, mode: 'live', server: false, needs: ['ranges.30d'] }, 'xx').length > 0);
+  check('mode both with demo but without server is rejected', validateManifest({ ...base, mode: 'both', demo: true, server: false, needs: ['ranges.30d'] }, 'xx').length > 0);
+  check('mode both with demo + server is valid', validateManifest({ ...base, mode: 'both', demo: true, server: true }, 'xx').length === 0, validateManifest({ ...base, mode: 'both', demo: true, server: true }, 'xx').join('; '));
+  check('mode demo without server is valid', validateManifest({ ...base, mode: 'demo', demo: true, server: false }, 'xx').length === 0);
 }
 
 console.log(failures ? `\n${failures} feature unit test(s) FAILED` : '\nAll feature unit tests passed.');

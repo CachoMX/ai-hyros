@@ -15,9 +15,18 @@ One paragraph: the question this tab answers and for whom.
 { "window": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" }, "rows": [{ "name": "", "value": 0 }], "errors": [] }
 ```
 
+## View states
+The view renders every state the runner can hand it: fresh · stale
+(`{ ...data, stale: true, skipped }` → "showing the previous result" with
+`fmt.datetime`) · bare `{ skipped }` · `{ error }` · `null` / `{}`. It
+never throws (`scripts/feature-check.mjs` renders all of them).
+
 ## Rules honoured
 - Metrics re-derived after summing (never averaged); money via `ctx.fmt`.
 - Errors land inside the block; a missing block renders an empty state.
+- `server.js` checks `ctx.timeLeft()` before the first call (zero MCP calls
+  on a spent budget) and strips `stale`/`skipped` from `previous` before
+  reusing it.
 
 ## Porting notes
 What another app must provide (the block shape above) to reuse `view.js`
