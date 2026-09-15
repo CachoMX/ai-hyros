@@ -76,6 +76,12 @@ try {
   check('merged: income re-joined from fresh sales', snap2.crm.leads.find((l) => l.id === 'lead-1')?.income === 149);
   check('merged: no duplicates', new Set(snap2.crm.leads.map((l) => l.id)).size === snap2.crm.leads.length);
 
+  console.log('\nFeature steps: stale reuse when the budget is spent');
+  const snap3 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 0 });
+  check('skipped step keeps the previous block, marked stale', snap3.health.stale === true && snap3.health.skipped === 'time budget' && snap3.health.domains.length === 2, JSON.stringify(Object.keys(snap3.health)));
+  check('skipped step with no previous data stays a bare marker', JSON.stringify((await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, budgetMs: 0 })).health) === '{"skipped":"time budget"}');
+  check('stale block is not reused as "fresh" by the next full build', (await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap3 })).health.stale === undefined);
+
   console.log('\nMulti-account: per-key MCP context + encrypted registry');
   process.env.ACCOUNT_KEY_SECRET = 'test-secret';
   const acc = await import('../api/_accounts.js');

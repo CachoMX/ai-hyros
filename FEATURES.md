@@ -51,6 +51,10 @@ one view.** Document the shape in `SPEC.md` — that is the porting contract.
 Conventions inside a block:
 - `{ error: "message" }` when the step failed entirely; `errors: []` for
   partial problems; `{ skipped: "time budget" }` when there was no time.
+  When a step is skipped and the previous snapshot has this block, the
+  runner keeps that block and adds `stale: true` next to `skipped`, so the
+  view can show the last result instead of an empty tab. Views must handle
+  all three: fresh, stale, and bare `{ skipped }`.
 - Dates as `YYYY-MM-DD` strings; money as plain numbers in the account
   currency; nothing pre-formatted.
 - Keep it small (a few hundred rows at most). The snapshot is one JSON
@@ -100,7 +104,10 @@ Node (`make-seed`, `feature-check`), so no DOM and no `fetch`.
 
 Runs inside `/api/refresh` after the core snapshot (account, ad accounts,
 ranges, CRM) is built, for every feature with `"server": true`, in registry
-order, within the function's remaining time budget. Returns the block.
+order, within the function's remaining time budget. Each step gets a fair
+share of what is left (remaining time / steps still to run; the last one
+gets the rest) as its `deadline`, so an expensive step cannot starve the
+ones after it. Returns the block.
 
 `ctx`: `callTool(name, args, { timeoutMs })`, `callToolPaged(name, args,
 { maxPages, pageSize })`, `snapshot` (core), `previous` (this feature's

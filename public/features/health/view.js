@@ -10,21 +10,30 @@ export function render(ctx) {
   const paramRows = (h.trackingParams || []).flatMap((p) => (p.rows || []).map((r) => ({ ...r, _type: p.type })));
   const flagged = paramRows.filter((r) => r && (r.valid === false || r.missing || r.ok === false || /missing|invalid/i.test(JSON.stringify(r))));
   const acct = snapshot.account || {};
+  // The step did not run this refresh (no data at all) vs. ran earlier and is
+  // being shown again (stale). Only a block with a checkedAt actually ran.
+  const notRun = !h.checkedAt;
+  const hasGoogle = (snapshot.adAccounts || []).some((a) => /GOOGLE/.test(a.type || ''));
+  const status = h.skipped
+    ? (h.stale
+      ? `<br>Skipped this refresh (${esc(h.skipped)}) — showing the previous check${h.checkedAt ? ` from ${esc(fmt.datetime(h.checkedAt))}` : ''}.`
+      : `<br>Skipped this refresh (${esc(h.skipped)}) — nothing was checked yet. Hit Refresh again.`)
+    : '';
 
   ctx.root.innerHTML = `
     <div class="note"><b>Tracking Health.</b> Is the HYROS script actually on your
       domains, and do your ad links carry the parameters attribution needs? Checked by HYROS itself
       (<code>hyros_assert_script_presence_on_domain</code>, <code>hyros_check_tracking_parameters_for_integrations</code>)
       ${h.checkedAt ? `at ${esc(fmt.datetime(h.checkedAt))}` : ''}.
-      ${h.error ? `<br><b>Error:</b> ${esc(h.error)}` : ''}${h.skipped ? `<br>Skipped this refresh: ${esc(h.skipped)}.` : ''}
+      ${h.error ? `<br><b>Error:</b> ${esc(h.error)}` : ''}${status}
       ${ctx.demo ? ' <span class="pill warn">demo</span>' : ''}</div>
     <div class="kpis">${kpis([
-      { label: 'Verified domains', value: fmt.int((h.domains || []).length) },
+      { label: 'Verified domains', value: notRun ? '—' : fmt.int((h.domains || []).length), sub: notRun ? 'not checked' : '' },
       { label: 'Script present', value: scripts.length ? `${okCount} / ${scripts.length}` : '—',
         cls: scripts.length && okCount < scripts.length ? 'bad' : (scripts.length ? 'good' : ''), sub: 'of domains checked' },
       { label: 'Ads missing tracking params', value: paramRows.length ? fmt.int(flagged.length) : '—',
         cls: flagged.length ? 'bad' : (paramRows.length ? 'good' : ''), sub: (h.trackingParams || []).map((p) => p.type).join(', ') || 'no Google channels checked' },
-      { label: 'Check errors', value: fmt.int((h.errors || []).length), cls: (h.errors || []).length ? 'bad' : '' },
+      { label: 'Check errors', value: notRun ? '—' : fmt.int((h.errors || []).length), cls: (h.errors || []).length ? 'bad' : '' },
     ])}</div>
     <div class="fcols">
       <div class="fpanel"><h3>Script presence</h3>
@@ -33,7 +42,7 @@ export function render(ctx) {
           const ok = SCRIPT_OK.has(String(st).toUpperCase());
           return `<div class="health-row"><code title="${esc(url)}">${esc(url)}</code>
             <span class="pill ${ok ? 'ok' : 'bad'}">${esc(String(st).toLowerCase().replace(/_/g, ' '))}</span></div>`;
-        }).join('') : `<div class="empty">${(h.domains || []).length ? 'No script check result.' : 'No verified domains on this account — add one in HYROS to enable the check.'}</div>`}
+        }).join('') : `<div class="empty">${notRun ? 'Not checked this refresh.' : ((h.domains || []).length ? 'No script check result.' : 'No verified domains on this account — add one in HYROS to enable the check.')}</div>`}
         ${(h.errors || []).length ? `<div class="sub" style="margin-top:8px">${esc(h.errors.join(' · '))}</div>` : ''}
       </div>
       <div class="fpanel"><h3>Account &amp; access</h3>
@@ -51,6 +60,6 @@ export function render(ctx) {
         const label = r.adName || r.name || r.ad || r.adId || r.id || JSON.stringify(r).slice(0, 80);
         return `<div class="health-row"><span class="pill">${esc(r._type)}</span><code title="${esc(JSON.stringify(r))}">${esc(String(label))}</code>
           <span class="pill ${bad ? 'bad' : 'ok'}">${bad ? 'missing / invalid' : 'ok'}</span></div>`;
-      }).join('') : `<div class="empty">${(h.trackingParams || []).length ? 'No ads reported by the check in the last hour.' : 'No Google ad accounts connected — nothing to check.'}</div>`}
+      }).join('') : `<div class="empty">${notRun ? 'Not checked this refresh.' : (hasGoogle ? 'No ads reported by the check in the last hour.' : 'No Google ad accounts connected — nothing to check.')}</div>`}
     </div>`;
 }
