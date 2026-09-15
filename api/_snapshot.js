@@ -229,9 +229,27 @@ export function mergeLeads(previousLeads, changedLeads, leadsFrom) {
   for (const l of changedLeads || []) if (l?.id) byId.set(l.id, l);
   const floor = `${leadsFrom}T00:00:00`;
   return [...byId.values()]
+    // A lead HYROS merged into another comes back with `originLead` (the
+    // Lead schema); its own row is gone from the account, so drop it here.
+    // Permanently DELETED leads carry no marker in the API — they simply
+    // stop being returned — so they linger until they leave the window or
+    // a full pull (previous older than 7 days) rebuilds the set.
+    .filter((l) => !l.mergedInto)
     .filter((l) => !l.joined || String(l.joined).slice(0, 19) >= floor)
     .sort((a, b) => String(b.joined || '').localeCompare(String(a.joined || '')));
 }
+
+/** Previous window overlaps the new one and its real sync is recent enough to build on. */
+function canSyncIncrementally({ previous, prevAt, leadsFrom, leadsTo }) {
+  const win = previous?.crm?.window;
+  if (!Array.isArray(previous?.crm?.leads) || !win?.from || !win?.to || !prevAt) return false;
+  const overlaps = win.from <= leadsTo && win.to >= leadsFrom;
+  const recent = prevAt <= leadsTo && prevAt >= addDays(leadsTo, -INCREMENTAL_MAX_AGE_DAYS);
+  return overlaps && recent;
+}
+
+/** A previous sync older than this rebuilds the lead set from scratch. */
+const INCREMENTAL_MAX_AGE_DAYS = 7;
 
 async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null }) {
   // Incremental: when the previous snapshot is recent enough, pull only the
@@ -242,8 +260,9 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
   const prevLeads = previous?.crm?.leads;
   const prevSynced = previous?.crm?.sync?.syncedAt || previous?.generatedAt;
   const prevAt = prevSynced ? String(prevSynced).slice(0, 10) : null;
-  const incremental = Array.isArray(prevLeads) && prevAt && prevAt >= addDays(leadsFrom, 1)
-    && previous?.crm?.window?.from === leadsFrom;
+  // The daily cron moves the 30-day window by a day, so windows are compared
+  // by overlap, not equality; the pull starts a day before the last real sync.
+  const incremental = canSyncIncrementally({ previous, prevAt, leadsFrom, leadsTo });
   const leadsRequest = incremental
     ? { updatedFromDate: addDays(prevAt, -1), updatedToDate: leadsTo }
     : { fromDate: leadsFrom, toDate: leadsTo };
@@ -299,12 +318,14 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
       lastSource: last,
       lastSourceDate: last?.clickDate || null,
       hasAttribution: Boolean(first || last),
+      // Set when HYROS merged this lead into another (Lead.originLead).
+      mergedInto: l.originLead?.id || l.originLead?.email || null,
     };
   });
 
-  const leads = (incremental ? mergeLeads(prevLeads, fetchedLeads, leadsFrom) : fetchedLeads)
+  const leads = (incremental ? mergeLeads(prevLeads, fetchedLeads, leadsFrom) : fetchedLeads.filter((l) => !l.mergedInto))
     // Income is re-joined from the fresh sales pull for every lead, merged or not.
-    .map((l) => ({ ...l, income: incomeByEmail.get((l.email || '').toLowerCase()) || 0 }));
+    .map(({ mergedInto, ...l }) => ({ ...l, income: incomeByEmail.get((l.email || '').toLowerCase()) || 0 }));
 
   const leadName = (l) =>
     [l?.firstName, l?.lastName].filter(Boolean).join(' ').trim() || null;

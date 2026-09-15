@@ -168,11 +168,26 @@ try {
   const leadsReq = calls.find((c) => c.name === 'hyros_get_leads')?.args.request;
   check('leads pulled with updatedFromDate', Boolean(leadsReq?.updatedFromDate) && !leadsReq?.fromDate, JSON.stringify(leadsReq));
   check('sync flagged incremental', snap2.crm.sync.incremental === true && snap2.crm.sync.leadsFetched === 3);
-  check('merged: previous leads kept', snap2.crm.leads.some((l) => l.id === 'lead-2') && snap2.crm.leads.some((l) => l.id === 'lead-3'));
+  check('merged: previous leads kept', snap2.crm.leads.some((l) => l.id === 'lead-3'));
   check('merged: changed lead updated in place', snap2.crm.leads.find((l) => l.id === 'lead-1')?.stage === 'Customer');
   check('merged: new lead added', snap2.crm.leads.some((l) => l.id === 'lead-9'));
+  check('merged: a lead HYROS merged into another (originLead) is dropped', !snap2.crm.leads.some((l) => l.id === 'lead-2') && !('mergedInto' in snap2.crm.leads[0]), JSON.stringify(snap2.crm.leads.map((l) => l.id)));
   check('merged: income re-joined from fresh sales', snap2.crm.leads.find((l) => l.id === 'lead-1')?.income === 149);
   check('merged: no duplicates', new Set(snap2.crm.leads.map((l) => l.id)).size === snap2.crm.leads.length);
+
+  console.log('\nDaily cron: day 2 builds incrementally on top of day 1 (window moves, still overlaps)');
+  calls.length = 0;
+  const day2 = await buildSnapshot({ now: new Date('2026-09-15T12:00:00Z'), prefs, previous: { ...snap, generatedAt: '2026-09-14T12:00:00.000Z' } });
+  const day2Req = calls.find((c) => c.name === 'hyros_get_leads')?.args.request;
+  check('day 2 takes the incremental path', day2.crm.sync.incremental === true && String(day2Req?.updatedFromDate || '').startsWith('2026-09-13') && !day2Req?.fromDate, JSON.stringify(day2Req));
+  check('window moved a day and leads outside it dropped', day2.crm.window.from === '2026-08-17' && day2.crm.leads.every((l) => String(l.joined).slice(0, 10) >= day2.crm.window.from), JSON.stringify(day2.crm.window));
+  check('day 2 keeps day-1 leads and adds the new one', day2.crm.leads.some((l) => l.id === 'lead-3') && day2.crm.leads.some((l) => l.id === 'lead-9'));
+  calls.length = 0;
+  const old = await buildSnapshot({ now: new Date('2026-09-25T12:00:00Z'), prefs, previous: { ...snap, generatedAt: '2026-09-14T12:00:00.000Z' } });
+  check('a previous older than 7 days forces a full pull', old.crm.sync.incremental === false && Boolean(calls.find((c) => c.name === 'hyros_get_leads')?.args.request.fromDate));
+  calls.length = 0;
+  const staleBase = await buildSnapshot({ now: new Date('2026-09-16T12:00:00Z'), prefs, previous: { ...snap, generatedAt: '2026-09-15T12:00:00.000Z', crm: { ...snap.crm, sync: { ...snap.crm.sync, stale: true } } } });
+  check('a stale (reused) CRM pulls from its real syncedAt, not the reuse time', String(calls.find((c) => c.name === 'hyros_get_leads')?.args.request.updatedFromDate || '').startsWith('2026-09-13') && staleBase.crm.sync.stale === undefined, JSON.stringify(calls.find((c) => c.name === 'hyros_get_leads')?.args.request));
 
   console.log('\nFeature steps: stale reuse when the budget is spent');
   const snap3 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 0 });
