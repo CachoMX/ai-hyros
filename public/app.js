@@ -763,6 +763,7 @@ function openReplaceKey(id) {
 async function switchAccount(id) {
   if (state.demo) setDemo(false, { silent: true });
   if (id === state.account && state.origin !== 'none') return;
+  const previous = state.account;
   state.account = id;
   localStorage.setItem('aihyros_account', id);
   state.path = [];
@@ -776,7 +777,13 @@ async function switchAccount(id) {
     $('reportNote').innerHTML = '';
     if (state.origin === 'none') firstBuild();
   } catch (err) {
-    note(`Could not load this account: ${esc(err.message)}`, true);
+    // The table still shows the previous account, so the selector must too.
+    state.account = previous;
+    if (previous) localStorage.setItem('aihyros_account', previous); else localStorage.removeItem('aihyros_account');
+    renderChrome();
+    if (!$('acctPanel').hidden) renderAcctPanel();
+    const label = state.accounts.find((x) => x.id === id)?.label || id;
+    note(`Could not load <b>${esc(label)}</b>: ${esc(failureCopy(err))} Still showing the previous account.`, true);
   }
 }
 
@@ -797,7 +804,7 @@ async function firstBuild() {
     await loadAccounts();
     pickValidRange();
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
-    note(`Built in ${(body.ms / 1000).toFixed(1)}s.` + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+    note(`Built in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
   } catch (err) {
     note(`First build failed: ${esc(failureCopy(err))}`, true);
   } finally {
@@ -1082,8 +1089,7 @@ $('refreshBtn').addEventListener('click', async () => {
     if (body.ok) {
       await load();
       renderChrome(); renderRangeChips(); renderReport(); renderCrm();
-      note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.`
-        + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+      note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
     } else {
       note(`Refresh failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
     }
@@ -1097,6 +1103,21 @@ $('refreshBtn').addEventListener('click', async () => {
 
 function note(msg, isErr) {
   $('reportNote').innerHTML = `<div class="note${isErr ? ' err' : ''}">${msg}</div>`;
+}
+
+/**
+ * Why a refresh answered persisted:false. "KV is not configured" only when
+ * the store really is absent (the response's own flag, else what /api/data
+ * and /api/setup said); with a store present the write itself failed —
+ * almost always a snapshot over the store's value limit.
+ */
+function persistNote(body) {
+  if (body?.persisted) return '';
+  const storage = body?.storeConfigured ?? body?.storage
+    ?? (body?.storeVia ? true : undefined)
+    ?? state.capabilities?.storeConfigured ?? state.setup?.storage;
+  if (storage === false || /KV is not configured/i.test(String(body?.warning || ''))) return ' Not persisted — KV is not configured.';
+  return ' Snapshot too large to store — see the account menu.';
 }
 
 /* ------------------------------------------------------------------ *
@@ -1804,11 +1825,17 @@ function renderCrmTabs() {
   $('attrFilter').hidden = !leadsOnly;
 }
 
+/**
+ * KPI tiles. Every field is TEXT and is escaped here — features hand in raw
+ * names (an ad name as `sub`, say), so this is the one place that makes them
+ * safe. `cls` is limited to the two money tones.
+ */
 function kpiTiles(list) {
+  const tone = (cls) => (cls === 'good' || cls === 'bad' ? cls : '');
   return list.map((k) => `<div class="kpi"${k.title ? ` title="${esc(k.title)}"` : ''}>
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value ${k.cls || ''}">${k.value}</div>
-      <div class="kpi-sub">${k.sub || ''}</div>
+      <div class="kpi-label">${esc(k.label)}</div>
+      <div class="kpi-value ${tone(k.cls)}">${esc(k.value)}</div>
+      <div class="kpi-sub">${esc(k.sub || '')}</div>
     </div>`).join('');
 }
 
@@ -2085,9 +2112,14 @@ $('crmSearch').addEventListener('input', (e) => { state.crm.search = e.target.va
  * CSV
  * ------------------------------------------------------------------ */
 
+/* A text cell starting with one of these is a formula to Excel/Sheets (CSV injection via an ad or lead name). */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
 function toCsv(headers, records) {
   const cell = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
+    if (v === null || v === undefined) return '';
+    // Numbers are never formulas; only text gets the guard (so -12.5 stays a number).
+    const s = typeof v === 'number' ? String(v) : `${FORMULA_START.test(String(v)) ? "'" : ''}${String(v)}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [headers.map(cell).join(','), ...records.map((r) => r.map(cell).join(','))].join('\n');
