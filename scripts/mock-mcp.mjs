@@ -16,6 +16,36 @@ import { createServer } from 'node:http';
 const PORT = Number(process.env.MOCK_MCP_PORT) || 4322;
 export const calls = [];
 
+/** A tool-level failure: the dispatcher turns it into an isError reply, like the real MCP. */
+class ToolError extends Error {}
+
+// Ad accounts of every type the real MCP reports, plus one that is connected
+// but broken (9007) so the pipeline's per-account isolation is exercised.
+const AD_ACCOUNTS = [
+  { id: '9001', name: 'Mock Meta', type: 'FACEBOOK' },
+  { id: '9002', name: 'Mock Google', type: 'GOOGLE' },
+  { id: '9003', name: 'Mock Snap', type: 'SNAPCHAT' },
+  { id: '9004', name: 'Mock LinkedIn', type: 'LINKEDIN' },
+  { id: '9005', name: 'Mock Google V2', type: 'GOOGLE_V2' },
+  { id: '9006', name: 'Mock Reddit', type: 'REDDIT' },
+  { id: '9007', name: 'Mock TikTok (broken)', type: 'TIKTOK' },
+];
+
+// The `level` enum of GET /attribution (api-docs.hyros.com), per integration.
+// The real MCP rejects any other combination with the message mirrored below.
+const LEVELS_FOR = {
+  FACEBOOK: ['facebook_campaign', 'facebook_adset', 'facebook_ad'],
+  GOOGLE: ['google_campaign', 'google_ad'],
+  GOOGLE_V2: ['google_v2_adgroup', 'google_v2_keyword'],
+  TIKTOK: ['tiktok_adgroup', 'tiktok_ad'],
+  SNAPCHAT: ['snapchat_adsquad', 'snapchat_ad'],
+  PINTEREST: ['pinterest_adgroup', 'pinterest_ad'],
+  TWITTER: ['twitter_adgroup'],
+  BING: ['bing_adgroup', 'bing_ad'],
+  LINKEDIN: ['linkedin_campaign'],
+  REDDIT: [],
+};
+
 const ADSETS = [
   { id: 'as-1', name: 'Prospecting Broad', tag: '@as-1', category: 'Prospecting', cost: 900, revenue: 3200, sales: 24, leads: 80, clicks: 1200 },
   { id: 'as-2', name: 'Powerset', tag: '@as-2', category: 'Retargeting', cost: 300, revenue: 1800, sales: 15, leads: 30, clicks: 400 },
@@ -49,17 +79,35 @@ const TOOLS = {
       allowedAccounts: key === 'agency-key' ? [] : [{ accountId: 'agency-9', email: 'agency@example.test', companyName: 'Agency', status: 'APPROVED' }],
       accessibleAccounts: key === 'agency-key' ? CLIENTS : [],
     }),
-  hyros_get_ad_accounts: () => ({ result: [{ id: '9001', name: 'Mock Meta', type: 'FACEBOOK' }, { id: '9002', name: 'Mock Google', type: 'GOOGLE' }], nextPageId: null }),
+  hyros_get_ad_accounts: () => ({ result: AD_ACCOUNTS, nextPageId: null }),
   hyros_get_sources: () => ({
-    result: ADSETS.map((a) => ({
-      name: a.name, tag: a.tag, category: { name: a.category }, trafficSource: { name: 'facebook' },
-      adSource: { adSourceId: a.id, adAccountId: '9001', platform: 'FACEBOOK' },
-    })),
+    result: [
+      ...ADSETS.map((a) => ({
+        name: a.name, tag: a.tag, category: { name: a.category }, trafficSource: { name: 'facebook' },
+        adSource: { adSourceId: a.id, adAccountId: '9001', platform: 'FACEBOOK' },
+      })),
+      // The real source list covers every connected platform, one per source link.
+      ...AD_ACCOUNTS.filter((acct) => acct.id !== '9001').map((acct) => ({
+        name: `${acct.name} row`, tag: `@${acct.id}-1`, category: { name: 'Prospecting' }, trafficSource: { name: acct.type.toLowerCase() },
+        adSource: { adSourceId: `${acct.id}-1`, adAccountId: acct.id, platform: acct.type },
+      })),
+    ],
     nextPageId: null,
   }),
   hyros_get_attribution_report: ({ request }) => {
-    if (String(request.ids[0]) !== '9001') return { result: [], nextPageId: null };
-    const rows = /_AD$/.test(request.level) ? ADS : ADSETS;
+    const acct = AD_ACCOUNTS.find((a) => a.id === String(request.ids[0]));
+    if (!acct) return { result: [], nextPageId: null };
+    const level = String(request.level || '').toLowerCase();
+    if (!(LEVELS_FOR[acct.type] || []).includes(level)) {
+      throw new ToolError(`Unsupported level type ${level} for user integration: ${acct.type}. Product ID: 1`);
+    }
+    if (acct.id === '9007') throw new ToolError('Ad account integration is disconnected');
+    if (acct.id !== '9001') {
+      // One row per non-Meta account so the pipeline can be seen to carry it.
+      const row = { id: `${acct.id}-1`, name: `${acct.name} row`, cost: 100, revenue: 300, sales: 2, leads: 5, clicks: 50 };
+      return { result: [/_ad$/.test(level) ? { ...row, id: `${acct.id}-ad-1`, parentId: row.id, parentName: row.name } : row], nextPageId: null };
+    }
+    const rows = /_ad$/.test(level) ? ADS : ADSETS;
     return { result: rows.map((r) => ({ ...r, impressions: r.clicks * 40, totalRevenue: r.revenue, reportedResult: r.revenue * 0.7 })), nextPageId: null };
   },
   hyros_get_stages: () => ({ result: [{ name: 'Lead', amount: 120 }, { name: 'Customer', amount: 40 }], nextPageId: null }),
@@ -101,7 +149,12 @@ export function startMock(port = PORT) {
       calls.push({ name, args, apiKey: key, client, headerClient: req.headers['accessible-account-id'] || null });
       const fn = TOOLS[name];
       if (!fn) return reply({ isError: true, content: [{ type: 'text', text: `unknown tool ${name}` }] });
-      return reply({ content: [{ type: 'text', text: JSON.stringify(fn(args, { key, client })) }] });
+      try {
+        return reply({ content: [{ type: 'text', text: JSON.stringify(fn(args, { key, client })) }] });
+      } catch (err) {
+        if (err instanceof ToolError) return reply({ isError: true, content: [{ type: 'text', text: err.message }] });
+        throw err;
+      }
     }
     reply({});
   });

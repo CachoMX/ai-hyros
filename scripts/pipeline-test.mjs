@@ -37,12 +37,25 @@ try {
   const dupParents = ads.filter((a) => a.parentName === 'Powerset').map((a) => a.parentId);
   check('duplicate "Powerset" ad sets resolve to distinct parentIds', new Set(dupParents).size === 2);
 
+  const levelsFor = (id) => calls.filter((c) => c.name === 'hyros_get_attribution_report' && String(c.args.request.ids[0]) === id).map((c) => c.args.request.level);
+  const uniq = (id) => [...new Set(levelsFor(id))].sort().join(',');
+  check('classic Google reported at campaign + ad (no adgroup level exists)', uniq('9002') === 'GOOGLE_AD,GOOGLE_CAMPAIGN', uniq('9002'));
+  check('Snapchat reported at adsquad + ad', uniq('9003') === 'SNAPCHAT_AD,SNAPCHAT_ADSQUAD', uniq('9003'));
+  check('LinkedIn reported at campaign only', uniq('9004') === 'LINKEDIN_CAMPAIGN', uniq('9004'));
+  check('Google V2 reported at adgroup only', uniq('9005') === 'GOOGLE_V2_ADGROUP', uniq('9005'));
+  check('account type with no report level is skipped, not requested', levelsFor('9006').length === 0, uniq('9006'));
+  check('broken account requested once per level, then skipped', levelsFor('9007').length === 2, String(levelsFor('9007').length));
+  const warnIds = (snap.warnings || []).map((w) => w.adAccountId).sort().join(',');
+  check('skipped + broken accounts land in snapshot.warnings', warnIds === '9006,9007,9007', warnIds);
+  check('every other account still reaches the account level', ['9001', '9002', '9003', '9004', '9005'].every((id) => snap.ranges['30d'].levels.account.some((r) => r.id === id)), JSON.stringify(snap.ranges['30d'].levels.account.map((r) => r.id)));
+  check('non-Meta ad rows keep parentId too', snap.ranges['30d'].levels.ad.some((a) => a.id === '9002-ad-1' && a.parentId === '9002-1'));
+
   check('CRM full sync (no previous)', snap.crm.sync.incremental === false && snap.crm.leads.length === 3);
   check('agency relationship captured', snap.account.managedBy[0]?.email === 'agency@example.test');
   check('attribution window default captured', snap.account.attributionWindowDefault === 7);
 
   const curves = snap.scale.curves;
-  check('scale: accounts + top ad sets analyzed', curves.length === 2 + 3, String(curves.length));
+  check('scale: accounts + top ad sets analyzed', curves.length === snap.adAccounts.length + Math.min(6, snap.ranges['30d'].levels.adset.length), String(curves.length));
   check('scale: curve points normalized', curves[0].points.length === 5 && curves[0].points[0].spend === 20);
   check('scale: saturation spend parsed', curves[0].saturationSpend === 70);
   check('scale: account call passed cacCeiling', calls.find((c) => c.name === 'hyros_get_marginal_cac_curve')?.args.request.cacCeiling > 0);

@@ -170,6 +170,7 @@ button.drill:active, button.name-drill:active, .cohort-row:active { transform: n
 .brand-dot { display: none; }
 .meta { color: var(--ink-2); font-size: 12.5px; display: flex; align-items: center; flex-wrap: wrap; }
 .meta b { color: var(--ink); font-weight: 500; }
+.meta .warn { color: var(--warn, #b45309); cursor: help; }
 .meta > span { display: flex; align-items: center; }
 .meta > span + span::before { content: "·"; margin: 0 10px; color: var(--border-2); }
 /* the ::before dot would land INSIDE the pill's rounded box — space it with margin instead */

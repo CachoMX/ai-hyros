@@ -85,14 +85,24 @@ function normalizeRow(raw) {
   return derive(row);
 }
 
-/** SOURCE_LINK / AD report levels per ad platform (SourceNamingUtils model). */
-const LEVELS_BY_TYPE = {
-  FACEBOOK:  ['FACEBOOK_ADSET', 'FACEBOOK_AD'],
-  GOOGLE_V2: ['GOOGLE_V2_ADGROUP', 'GOOGLE_V2_AD'],
-  GOOGLE:    ['GOOGLE_ADGROUP', 'GOOGLE_AD'],
-  TIKTOK:    ['TIKTOK_ADGROUP', 'TIKTOK_AD'],
-  SNAPCHAT:  ['SNAPCHAT_ADSET', 'SNAPCHAT_AD'],
-  LINKEDIN:  ['LINKEDIN_CAMPAIGN', 'LINKEDIN_AD'],
+/**
+ * Report levels per ad-account type, named as the MCP's `level` enum names
+ * them (api-docs.hyros.com, GET /attribution). `adset` is the SOURCE_LINK
+ * level every platform has; `ad` exists only where the platform exposes one.
+ * Classic Google and LinkedIn are tracked at campaign level, Google V2 stops
+ * at ad group, Snapchat calls its ad set an "ad squad". Types missing here
+ * (REDDIT, APPLOVIN, WHOP_ADS, …) have no attribution level and are skipped.
+ */
+export const LEVELS_BY_TYPE = {
+  FACEBOOK:  { adset: 'FACEBOOK_ADSET',    ad: 'FACEBOOK_AD' },
+  GOOGLE:    { adset: 'GOOGLE_CAMPAIGN',   ad: 'GOOGLE_AD' },
+  GOOGLE_V2: { adset: 'GOOGLE_V2_ADGROUP', ad: null },
+  TIKTOK:    { adset: 'TIKTOK_ADGROUP',    ad: 'TIKTOK_AD' },
+  SNAPCHAT:  { adset: 'SNAPCHAT_ADSQUAD',  ad: 'SNAPCHAT_AD' },
+  PINTEREST: { adset: 'PINTEREST_ADGROUP', ad: 'PINTEREST_AD' },
+  TWITTER:   { adset: 'TWITTER_ADGROUP',   ad: null },
+  BING:      { adset: 'BING_ADGROUP',      ad: 'BING_AD' },
+  LINKEDIN:  { adset: 'LINKEDIN_CAMPAIGN', ad: null },
 };
 
 /* ---------------- report settings (saved via /api/prefs) ---------------- */
@@ -389,16 +399,46 @@ export async function buildSnapshot({
   const ranges = buildRanges(now, tz);
   const out = {};
 
+  // One ad account failing (unsupported level, disconnected integration, …)
+  // must not take the whole snapshot down: it is recorded in `warnings`,
+  // skipped for the remaining ranges, and the other accounts still report.
+  const warnings = [];
+  const failed = new Set();
+  const reported = new Set();
+  const warn = (acct, level, error) => {
+    warnings.push({ adAccountId: String(acct.id), name: acct.name || null, type: acct.type || null, level, error: String(error) });
+    onProgress(`skip ${acct.name || acct.id}: ${error}`);
+  };
+  const reportable = accounts.filter((acct) => {
+    if (LEVELS_BY_TYPE[acct.type]) return true;
+    warn(acct, null, `no attribution report level for ad account type ${acct.type}`);
+    return false;
+  });
+  const fetchLevelSafe = async (acct, level, range) => {
+    const id = String(acct.id);
+    const key = `${id}:${level}`;
+    if (failed.has(key)) return [];
+    try {
+      const rows = await fetchLevel(level, id, range, settings);
+      reported.add(id);
+      return rows;
+    } catch (err) {
+      if (err?.name === 'McpNotConfigured' || err?.code === 'auth') throw err;
+      failed.add(key);
+      warn(acct, level, err?.message || err);
+      return [];
+    }
+  };
+
   for (const [key, range] of Object.entries(ranges)) {
     onProgress(`range ${key}`);
     const adsetRows = [];
     const adRows = [];
-    for (const acct of accounts) {
-      const id = String(acct.id);
-      const [adsetLevel, adLevel] = LEVELS_BY_TYPE[acct.type] || LEVELS_BY_TYPE.FACEBOOK;
+    for (const acct of reportable) {
+      const { adset, ad } = LEVELS_BY_TYPE[acct.type];
       // Sequential per account: keeps us well inside the MCP's per-IP limiter.
-      adsetRows.push(...await fetchLevel(adsetLevel, id, range, settings));
-      adRows.push(...await fetchLevel(adLevel, id, range, settings));
+      adsetRows.push(...await fetchLevelSafe(acct, adset, range));
+      if (ad) adRows.push(...await fetchLevelSafe(acct, ad, range));
     }
     const levels = buildLevels({ adsetRows, adRows, sourceById, adAccountName });
     out[key] = {
@@ -408,13 +448,16 @@ export async function buildSnapshot({
     };
   }
 
+  // Nothing reported at all: surface the first failure instead of an empty dashboard.
+  if (!reported.size) throw new Error(warnings[0]?.error || 'No ad account could be reported');
+
   onProgress('crm');
   const today = ymdInTz(now, tz);
   const crm = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous });
 
   // Feature server steps (Scale Advisor, Tracking Health, anything a user
   // adds under public/features/) — best-effort inside the remaining budget.
-  const core = { schema: 2, attributionModel: model, settings, adAccounts: accounts.map((a) => ({ id: String(a.id), name: a.name, type: a.type })), ranges: out, crm, account: { email: user?.userProfile?.email || null, timezone: tz } };
+  const core = { schema: 2, attributionModel: model, settings, adAccounts: accounts.map((a) => ({ id: String(a.id), name: a.name, type: a.type })), ranges: out, crm, warnings, account: { email: user?.userProfile?.email || null, timezone: tz } };
   const featureBlocks = await runFeatureSteps({ snapshot: core, previous, deadline, onProgress });
 
   return {
@@ -437,6 +480,7 @@ export async function buildSnapshot({
     sourceCount: sourcesRaw.length,
     ranges: out,
     crm,
+    warnings,
     ...featureBlocks,
     buildMs: Date.now() - started,
   };

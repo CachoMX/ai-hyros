@@ -446,7 +446,12 @@ function renderChrome() {
   $('acctLabel').textContent = state.demo ? 'Demo account'
     : (acct?.label || s.account?.email || 'No account');
   $('acctBtn').title = `${state.demo ? 'Synthetic demo data' : (s.adAccounts.map((a) => a.name).join(', ') || 'no ad accounts')} · ${s.sourceCount} sources · ${attr}`;
-  $('meta').innerHTML = '';
+  // Ad accounts the last build could not report (unsupported level, broken
+  // integration): one short line so a missing platform is never silent.
+  const skipped = state.demo ? [] : (s.warnings || []);
+  $('meta').innerHTML = skipped.length
+    ? `<span class="warn" title="${esc(skipped.map((w) => `${w.name || w.adAccountId}: ${w.error}`).join('\n'))}">${skipped.length} ad account${skipped.length === 1 ? '' : 's'} skipped: ${esc([...new Set(skipped.map((w) => w.name || w.adAccountId))].join(', '))}</span>`
+    : '';
   $('updated').textContent = s.generatedAt ? `Updated ${upd}` : 'Not built yet';
 
   const badge = $('originBadge');
