@@ -388,12 +388,16 @@ try {
   let rr = fakeRes();
   await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
   check('refresh answers 502 forbidden on a client 403', rr.code === 502 && rr.body?.error === 'forbidden', JSON.stringify(rr.body));
+  check('a failed refresh still reports budgetMs + elapsedMs + steps', rr.body?.budgetMs === budget.REFRESH_BUDGET_MS && typeof rr.body?.elapsedMs === 'number' && Array.isArray(rr.body?.steps), JSON.stringify([rr.body?.budgetMs, rr.body?.elapsedMs]));
   check('refresh.failed logged with accountId, code, message, ms (no key material)', events('refresh.failed').some((e) => e.accountId === cli.id && e.code === 'forbidden' && /Not authorized/.test(e.message) && typeof e.ms === 'number') && !logLines.some((l) => /agency-key/.test(l)), JSON.stringify(events('refresh.failed')));
   const after403 = await acc.listAccounts();
   check('agency key NOT marked invalid by a client 403; lastError recorded', after403.find((a) => a.id === added.account.id).keyStatus === 'ok' && /Not authorized/.test(after403.find((a) => a.id === cli.id).lastError || ''), JSON.stringify(after403.map((a) => [a.id, a.keyStatus, a.lastError])));
   rr = fakeRes();
   await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
   check('a good refresh reports storeConfigured + persisted and logs refresh.ok with the warning count', rr.code === 200 && rr.body?.ok === true && rr.body.storeConfigured === true && rr.body.persisted === true && events('refresh.ok').some((e) => e.accountId === cli.id && typeof e.ms === 'number' && e.warnings === 3), JSON.stringify([rr.body?.storeConfigured, rr.body?.persisted, events('refresh.ok')]));
+  const c = rr.body?.counts || {};
+  check('a good refresh reports budgetMs, elapsedMs (= ms) and counts { leads, sales, calls, subscriptions, warnings }', rr.body?.budgetMs === budget.REFRESH_BUDGET_MS && typeof rr.body?.elapsedMs === 'number' && rr.body.elapsedMs === rr.body.ms && c.leads === 3 && c.sales === 2 && c.calls === 0 && c.subscriptions === 0 && c.warnings === 3, JSON.stringify([rr.body?.budgetMs, rr.body?.elapsedMs, c]));
+  check('the response shape otherwise holds (persisted, storeConfigured, templateVersion, generatedAt, settings, steps)', typeof rr.body?.templateVersion === 'string' && typeof rr.body?.generatedAt === 'string' && rr.body?.settings?.model === 'LAST_CLICK' && rr.body.steps.some((s) => /: budget 290s: core <= 130s, crm <= 87s, features >= 72s$/.test(s)) && c.adAccounts === 7 && typeof c.sources === 'number' && c.incremental === false, JSON.stringify([Object.keys(rr.body || {}), rr.body?.steps?.[0]]));
   // Cron loop: clients of an agency whose accessible_account_id mode is unsupported are skipped, not retried daily.
   const reg = await store.readAccounts();
   reg.find((a) => a.id === added.account.id).clientModeStatus = 'unsupported';

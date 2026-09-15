@@ -61,6 +61,10 @@ HYROS docs (REST API v1.42, MCP v1.0, Webhooks v1.2).
   of the step and the paged helpers stop at the step deadline by default,
   so a feature can pass `ctx.timeouts.slow` to a tool known to be slow
   without ever running past its share.
+- `/api/refresh` answers with `budgetMs`, `elapsedMs` and, on success,
+  `counts.{ leads, sales, calls, subscriptions, warnings }` next to the
+  existing `steps`, `persisted`, `storeConfigured` and `templateVersion`,
+  so the client can show what a refresh fetched and how long it took.
 - Attribution rows, sources and CRM lists are paginated within the refresh
   budget; the CRM shows "1,000+" when a list hit its cap.
 - HTTP 429 backs off using `Retry-After` and retries inside the deadline;

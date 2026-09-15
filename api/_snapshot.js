@@ -446,7 +446,7 @@ export async function buildSnapshot({
   const deadline = started + plan.budgetMs;
   const coreDeadline = started + plan.coreMs;
   const crmDeadline = coreDeadline + plan.crmMs;
-  const secs = (ms) => `${Math.round(ms / 1000)}s`;
+  const secs = (ms) => `${Math.floor(ms / 1000)}s`;
   onProgress(`budget ${secs(plan.budgetMs)}: core <= ${secs(plan.coreMs)}, crm <= ${secs(plan.crmMs)}, features >= ${secs(plan.featuresMs)}`);
   const saved = normalizeSettings(prefs?.settings);
   const model = saved.model;

@@ -124,6 +124,10 @@ export default async function handler(req, res) {
         ? undefined
         : 'KV is not configured, so this snapshot was not stored. Set KV_REST_API_URL / KV_REST_API_TOKEN.',
       ms: Date.now() - started,
+      // Budget vs. spent, so the client can show how much of the 5 minutes
+      // a large account really needed (`ms` is kept for older clients).
+      budgetMs: REFRESH_BUDGET_MS,
+      elapsedMs: Date.now() - started,
       steps,
       generatedAt: snapshot.generatedAt,
       templateVersion: snapshot.templateVersion,
@@ -132,6 +136,9 @@ export default async function handler(req, res) {
         adAccounts: snapshot.adAccounts.length,
         sources: snapshot.sourceCount,
         leads: snapshot.crm.leads.length,
+        sales: snapshot.crm.sales?.length ?? 0,
+        calls: snapshot.crm.calls?.length ?? 0,
+        subscriptions: snapshot.crm.subscriptions?.length ?? 0,
         leadsFetched: snapshot.crm.sync?.leadsFetched,
         incremental: snapshot.crm.sync?.incremental,
         warnings: snapshot.warnings?.length || 0,
@@ -148,6 +155,8 @@ export default async function handler(req, res) {
       storeConfigured: storeConfigured(),
       steps,
       ms: Date.now() - started,
+      budgetMs: REFRESH_BUDGET_MS,
+      elapsedMs: Date.now() - started,
     });
   }
 }
