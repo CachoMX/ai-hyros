@@ -11,8 +11,10 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('../public/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows the pathname is "/C:/…", which join() mangles into a 404 for every file.
+const ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.gif': 'image/gif', '.woff2': 'font/woff2' };
 
 const dev = {
