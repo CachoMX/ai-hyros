@@ -130,11 +130,7 @@ async function load() {
   state.serverPrefs = body.prefs || null;
   if (body.account && !state.account) state.account = body.account;
   state.snapshot = body.snapshot || emptySnapshot();
-  if (state.snapshot.ranges?.[state.range]?.unavailable) {
-    const live = Object.keys(state.snapshot.ranges)
-      .find((k) => !state.snapshot.ranges[k].unavailable);
-    if (live) state.range = live;
-  }
+  pickValidRange();
 }
 
 /* ------------------------------------------------------------------ *
@@ -446,12 +442,10 @@ function renderChrome() {
   $('acctLabel').textContent = state.demo ? 'Demo account'
     : (acct?.label || s.account?.email || 'No account');
   $('acctBtn').title = `${state.demo ? 'Synthetic demo data' : (s.adAccounts.map((a) => a.name).join(', ') || 'no ad accounts')} · ${s.sourceCount} sources · ${attr}`;
-  // Ad accounts the last build could not report (unsupported level, broken
-  // integration): one short line so a missing platform is never silent.
-  const skipped = state.demo ? [] : (s.warnings || []);
-  $('meta').innerHTML = skipped.length
-    ? `<span class="warn" title="${esc(skipped.map((w) => `${w.name || w.adAccountId}: ${w.error}`).join('\n'))}">${skipped.length} ad account${skipped.length === 1 ? '' : 's'} skipped: ${esc([...new Set(skipped.map((w) => w.name || w.adAccountId))].join(', '))}</span>`
-    : '';
+  // What the last build could not do — ad accounts skipped / rate limited /
+  // truncated / out of time, a truncated source list, ranges not fetched —
+  // one short line so nothing is silently missing; details in the tooltip.
+  $('meta').innerHTML = state.demo ? '' : buildWarningsLine(s);
   $('updated').textContent = s.generatedAt ? `Updated ${upd}` : 'Not built yet';
 
   const badge = $('originBadge');
@@ -483,6 +477,47 @@ function renderChrome() {
   $('setWrap').hidden = state.demo;
   renderFeatureTabs();
   renderSettingsSummary();
+}
+
+/* ---------- build warnings (snapshot.warnings[], sourcesTruncated, skipped ranges) ---------- */
+
+/* warning.kind -> the short word the header uses. Unknown kinds read as "skipped". */
+const WARNING_GROUPS = [
+  { key: 'skipped',      label: 'skipped',      kinds: ['unsupported', 'error'] },
+  { key: 'rate_limited', label: 'rate limited', kinds: ['rate_limited'] },
+  { key: 'truncated',    label: 'truncated',    kinds: ['truncated'] },
+  { key: 'time budget',  label: 'not fetched (time budget)', kinds: ['time budget'] },
+];
+const warningGroup = (w) => WARNING_GROUPS.find((g) => g.kinds.includes(w?.kind)) || WARNING_GROUPS[0];
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * One line, grouped by kind: "2 ad accounts skipped: A, B · 1 rate limited: C
+ * · sources list truncated · 1 range not fetched". Every detail goes in the
+ * title so the line itself stays short. Empty string when nothing is wrong.
+ */
+function buildWarningsLine(s) {
+  const warnings = Array.isArray(s?.warnings) ? s.warnings : [];
+  const parts = [];
+  const details = [];
+  for (const g of WARNING_GROUPS) {
+    const ws = warnings.filter((w) => warningGroup(w) === g);
+    if (!ws.length) continue;
+    const names = [...new Set(ws.map((w) => w.name || w.adAccountId || 'ad account'))];
+    parts.push(`${plural(names.length, 'ad account')} ${g.label}: ${names.join(', ')}`);
+    details.push(...ws.map((w) => `${w.name || w.adAccountId || 'ad account'}${w.level ? ` (${w.level})` : ''}: ${w.error || g.label}`));
+  }
+  if (s?.sourcesTruncated) {
+    parts.push('sources list truncated');
+    details.push('hyros_get_sources returned more sources than were fetched — ad sets past the cap roll up as Uncategorised / Unknown.');
+  }
+  const skippedRanges = Object.values(s?.ranges || {}).filter((r) => r?.skipped);
+  if (skippedRanges.length) {
+    parts.push(`${plural(skippedRanges.length, 'range')} not fetched (${skippedRanges.map((r) => r.label).join(', ')})`);
+    details.push(...skippedRanges.map((r) => `${r.label}: not fetched this refresh (${r.skipped}) — press Refresh again.`));
+  }
+  if (!parts.length) return '';
+  return `<span class="warn" title="${esc(details.join('\n'))}">${esc(parts.join(' · '))}</span>`;
 }
 
 /* ---------- report settings (attribution model / window / stage ranking) ---------- */
@@ -915,10 +950,12 @@ function resetStageFilter() {
   state.crm.stage = '';
 }
 
+const rangeUsable = (r) => Boolean(r) && !r.unavailable && !r.skipped;
+
 function pickValidRange() {
   const ranges = state.snapshot.ranges || {};
-  if (!ranges[state.range] || ranges[state.range].unavailable) {
-    const ok = Object.keys(ranges).find((k) => !ranges[k].unavailable);
+  if (!rangeUsable(ranges[state.range])) {
+    const ok = Object.keys(ranges).find((k) => rangeUsable(ranges[k]));
     if (ok) state.range = ok;
   }
 }
@@ -1236,10 +1273,13 @@ function renderCrumbs() {
 
 function renderRangeChips() {
   const ranges = state.snapshot.ranges || {};
+  const title = (r) => (r.skipped ? `Not fetched this refresh (${r.skipped}) — press Refresh again`
+    : r.unavailable ? 'Not in the baked seed snapshot — Refresh with live credentials'
+      : `${r.start} → ${r.end}`);
   $('rangeChips').innerHTML = Object.entries(ranges).map(([key, r]) => `
     <button class="chip ${key === state.range ? 'active' : ''}"
-            data-range="${key}" ${r.unavailable ? 'disabled' : ''}
-            title="${r.unavailable ? 'Not in the baked seed snapshot — Refresh with live credentials' : `${r.start} → ${r.end}`}">
+            data-range="${key}" ${r.unavailable || r.skipped ? 'disabled' : ''}
+            title="${esc(title(r))}">
       ${esc(r.label)}
     </button>`).join('');
 
@@ -1259,7 +1299,7 @@ $('hideZero').addEventListener('change', (e) => { state.hideZero = e.target.chec
 
 function currentRows() {
   const block = state.snapshot.ranges?.[state.range];
-  if (!block || block.unavailable) return null;
+  if (!block || block.unavailable || block.skipped) return null;
   let rows = effectiveLevels(block)[state.level] || [];
   if (state.search) rows = rows.filter((r) =>
     `${r.name ?? ''} ${r.parentName ?? ''} ${r.id}`.toLowerCase().includes(state.search));
@@ -1297,9 +1337,10 @@ function renderReport() {
 
   if (!rows) {
     $('reportKpis').innerHTML = '';
-    $('reportTable').innerHTML =
-      `<tbody><tr><td class="empty">This range is not in the baked seed snapshot.<br>
-       Set <code>HYROS_MCP_URL</code> + <code>HYROS_API_KEY</code> and hit Refresh to load it live.</td></tr></tbody>`;
+    $('reportTable').innerHTML = `<tbody><tr><td class="empty">${block?.skipped
+      ? `This range was not fetched this refresh (${esc(block.skipped)}).<br>Press <b>Refresh</b> again — the refresh is incremental.`
+      : `This range is not in the baked seed snapshot.<br>
+       Set <code>HYROS_MCP_URL</code> + <code>HYROS_API_KEY</code> and hit Refresh to load it live.`}</td></tr></tbody>`;
     $('reportCount').textContent = '';
     updateHProxy();
     return;
@@ -1702,12 +1743,14 @@ function recordRows(kind) {
 
 function renderCrmTabs() {
   const crm = state.snapshot.crm || {};
+  const count = (kind) => (Array.isArray(crm[kind]) ? `${fmt.int(crm[kind].length)}${crmTruncated(kind) ? '+' : ''}` : '?');
   const counts = {
-    leads: (crm.leads || []).length,
-    sales: Array.isArray(crm.sales) ? crm.sales.length : '?',
-    calls: Array.isArray(crm.calls) ? crm.calls.length : '?',
-    subscriptions: Array.isArray(crm.subscriptions) ? crm.subscriptions.length : '?',
+    leads: count('leads'),
+    sales: count('sales'),
+    calls: count('calls'),
+    subscriptions: count('subscriptions'),
   };
+  renderCrmNote();
   $('crmTabs').innerHTML = CRM_TABS.map((t) => `
     <button class="chip ${state.crm.tab === t.key ? 'active' : ''}" data-tab="${t.key}">
       ${t.label} <span class="chip-count">${counts[t.key]}</span>
@@ -1721,11 +1764,48 @@ function renderCrmTabs() {
 }
 
 function kpiTiles(list) {
-  return list.map((k) => `<div class="kpi">
+  return list.map((k) => `<div class="kpi"${k.title ? ` title="${esc(k.title)}"` : ''}>
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value ${k.cls || ''}">${k.value}</div>
       <div class="kpi-sub">${k.sub || ''}</div>
     </div>`).join('');
+}
+
+/* ---------- CRM list caps (crm.sync.truncated.<kind>) and carry-over (crm.sync.stale) ---------- */
+
+/** True when the MCP had more <kind> rows than the refresh fetched (the list is capped). */
+const crmTruncated = (kind) => Boolean(state.snapshot?.crm?.sync?.truncated?.[kind]);
+const crmTotal = (kind) => (Array.isArray(state.snapshot?.crm?.[kind]) ? state.snapshot.crm[kind].length : 0);
+
+/** "1,000+ leads (newest 1,000 shown)" on a capped list; "12 of 1,000+ leads (…)" once filtered. */
+function crmCountText(kind, shown) {
+  if (!crmTruncated(kind)) return `${fmt.int(shown)} ${kind}`;
+  const cap = fmt.int(crmTotal(kind));
+  return `${shown === crmTotal(kind) ? '' : `${fmt.int(shown)} of `}${cap}+ ${kind} (newest ${cap} shown)`;
+}
+
+/** Tooltip for a KPI that sums over a capped list; empty when the list is complete. */
+function capTitle(...kinds) {
+  const capped = kinds.filter(crmTruncated);
+  if (!capped.length) return '';
+  return `based on the first ${capped.map((k) => `${fmt.int(crmTotal(k))} ${k}`).join(' and ')} rows — the list was capped`;
+}
+
+/** The CRM note: carried-over CRM and capped lists, said once above the table. */
+function renderCrmNote() {
+  const sync = state.snapshot?.crm?.sync || {};
+  const bits = [];
+  if (sync.stale) {
+    bits.push('<b>CRM from the previous refresh.</b> The last refresh ran out of time before the CRM, '
+      + 'so these leads, sales, calls and subscriptions are the previous snapshot’s.');
+  }
+  const capped = CRM_TABS.filter((t) => sync.truncated?.[t.key])
+    .map((t) => `${t.label.toLowerCase()} (newest ${fmt.int(crmTotal(t.key))} shown)`);
+  if (capped.length) {
+    bits.push(`<b>Capped lists:</b> ${esc(capped.join(', '))} — HYROS had more rows than this refresh fetched, `
+      + 'so the totals on those tabs cover only the rows shown.');
+  }
+  $('crmNote').innerHTML = bits.length ? `<div class="note">${bits.join(' ')}</div>` : '';
 }
 
 function attachCrmSort() {
@@ -1792,12 +1872,13 @@ function renderCrmLeads() {
   const income = rows.reduce((s, l) => s + (l.income || 0), 0);
   const attributed = rows.filter((l) => l.hasAttribution).length;
 
+  const cap = capTitle('leads');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Leads in view', value: fmt.int(rows.length) },
-    { label: 'Attributed', value: fmt.int(attributed),
+    { label: 'Leads in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Attributed', value: fmt.int(attributed), title: cap,
       sub: rows.length ? `${((attributed / rows.length) * 100).toFixed(0)}% have a click source` : '' },
-    { label: 'Customers', value: fmt.int(rows.filter((l) => l.stage === 'Customer').length) },
-    { label: 'Income', value: fmt.money(income), sub: 'joined from sales by email' },
+    { label: 'Customers', value: fmt.int(rows.filter((l) => l.stage === 'Customer').length), title: cap },
+    { label: 'Income', value: fmt.money(income), sub: 'joined from sales by email', title: capTitle('leads', 'sales') },
     { label: 'Account total', value: fmt.int((crm.stages || []).reduce((s, x) => s + x.amount, 0)),
       sub: 'leads across all stages' },
   ]);
@@ -1819,7 +1900,7 @@ function renderCrmLeads() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(CRM_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No leads match this filter.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} leads`;
+  $('crmCount').textContent = crmCountText('leads', rows.length);
   attachCrmSort();
 }
 
@@ -1840,12 +1921,13 @@ function renderCrmSales() {
   if (rows === null) return needsRefresh('Sales');
 
   const revenue = rows.reduce((s, x) => s + (x.amount || 0), 0);
+  const cap = capTitle('sales');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Sales in view', value: fmt.int(rows.length) },
-    { label: 'Revenue', value: fmt.money(revenue), cls: revenue ? 'good' : '' },
-    { label: 'AOV', value: fmt.money(rows.length ? revenue / rows.length : null) },
-    { label: 'Refunded', value: fmt.int(rows.filter((x) => x.refunded).length) },
-    { label: 'Recurring', value: fmt.int(rows.filter((x) => x.recurring).length) },
+    { label: 'Sales in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Revenue', value: fmt.money(revenue), cls: revenue ? 'good' : '', title: cap },
+    { label: 'AOV', value: fmt.money(rows.length ? revenue / rows.length : null), title: cap },
+    { label: 'Refunded', value: fmt.int(rows.filter((x) => x.refunded).length), title: cap },
+    { label: 'Recurring', value: fmt.int(rows.filter((x) => x.recurring).length), title: cap },
   ]);
 
   const body = rows.map((x) => `<tr>
@@ -1863,7 +1945,7 @@ function renderCrmSales() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(SALES_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No sales in this snapshot window.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} sales`;
+  $('crmCount').textContent = crmCountText('sales', rows.length);
   attachCrmSort();
 }
 
@@ -1884,12 +1966,13 @@ function renderCrmCalls() {
 
   const qualified = rows.filter((x) => x.qualified).length;
   const attributed = rows.filter((x) => x.firstSource || x.lastSource).length;
+  const cap = capTitle('calls');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Calls in view', value: fmt.int(rows.length) },
-    { label: 'Qualified', value: fmt.int(qualified),
+    { label: 'Calls in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Qualified', value: fmt.int(qualified), title: cap,
       sub: rows.length ? `${((qualified / rows.length) * 100).toFixed(0)}% of calls` : '' },
-    { label: 'Attributed', value: fmt.int(attributed), sub: 'call carries a click source' },
-    { label: 'From ads', value: fmt.int(rows.filter((x) => x.ad).length), sub: 'specific ad known' },
+    { label: 'Attributed', value: fmt.int(attributed), sub: 'call carries a click source', title: cap },
+    { label: 'From ads', value: fmt.int(rows.filter((x) => x.ad).length), sub: 'specific ad known', title: cap },
   ]);
 
   const stateCls = (st) => (st === 'QUALIFIED' ? 'stage' : st === 'NO_SHOW' || st === 'CANCELLED' ? 'warn' : '');
@@ -1907,7 +1990,7 @@ function renderCrmCalls() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(CALLS_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No booked calls in this snapshot window.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} calls`;
+  $('crmCount').textContent = crmCountText('calls', rows.length);
   attachCrmSort();
 }
 
@@ -1926,12 +2009,13 @@ function renderCrmSubs() {
   if (rows === null) return needsRefresh('Subscriptions');
 
   const active = rows.filter((x) => x.status === 'ACTIVE' || x.status === 'TRIALING');
+  const cap = capTitle('subscriptions');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Subscriptions', value: fmt.int(rows.length) },
-    { label: 'Active / trialing', value: fmt.int(active.length) },
-    { label: 'Canceled', value: fmt.int(rows.filter((x) => x.status === 'CANCELED').length) },
+    { label: 'Subscriptions', value: fmt.int(rows.length), title: cap },
+    { label: 'Active / trialing', value: fmt.int(active.length), title: cap },
+    { label: 'Canceled', value: fmt.int(rows.filter((x) => x.status === 'CANCELED').length), title: cap },
     { label: 'Active value', value: fmt.money(active.reduce((s, x) => s + (x.price || 0), 0)),
-      sub: 'sum of active plan prices' },
+      sub: 'sum of active plan prices', title: cap },
   ]);
 
   const body = rows.map((x) => `<tr>
@@ -1948,7 +2032,7 @@ function renderCrmSubs() {
     ? `${headRow(SUBS_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No subscriptions tracked in this account’s snapshot window —
        the tab is wired to <code>hyros_get_subscriptions</code> and will populate when they exist.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} subscriptions`;
+  $('crmCount').textContent = crmCountText('subscriptions', rows.length);
   attachCrmSort();
 }
 
