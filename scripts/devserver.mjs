@@ -39,7 +39,14 @@ const setupState = () => ({
   cronSecret: dev.password ? (dev.pendingSecrets ? 'kv' : 'env') : null, pendingSecrets: dev.pendingSecrets,
   accounts: dev.accounts.filter((a) => a.kind !== 'client').length, envKey: false, mcpUrl: 'https://mcp.hyros.com/mcp', createdAt: null,
 });
-const authed = (url) => !dev.password || url.searchParams.get('key') === dev.password;
+/* Like _auth.js: the x-report-key header, a Bearer token, or (legacy) ?key=. The app itself only sends the header. */
+const signedIn = (url, req) => {
+  if (!dev.password) return false;
+  const bearer = String(req?.headers?.authorization || '').startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
+  return [req?.headers?.['x-report-key'], bearer, url.searchParams.get('key')].some((c) => c === dev.password);
+};
+/* Routes stay open until a password exists (the first-run screen needs them); after that, the password. */
+const authed = (url, req) => !dev.password || signedIn(url, req);
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve({}); } }); });
 
@@ -49,8 +56,8 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/setup') {
     if (req.method === 'GET') {
       const out = setupState();
-      // Like api/setup.js: before sign-in only what the page needs to pick a screen.
-      if (!authed(url)) {
+      // Like api/setup.js: before sign-in (or before a password exists) only what the page needs to pick a screen.
+      if (!signedIn(url, req)) {
         if (url.searchParams.get('secrets')) return json(res, 401, { ok: false, error: 'unauthorized' });
         return json(res, 200, { ok: true, state: out.state, storage: out.storage, pendingSecrets: out.pendingSecrets });
       }
@@ -78,14 +85,14 @@ const server = createServer(async (req, res) => {
       }
       return json(res, 200, { ...setupState(), ...added });
     }
-    if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
+    if (!authed(url, req)) return json(res, 401, { ok: false, error: 'unauthorized' });
     if (body.action === 'harden') { dev.pendingSecrets = false; return json(res, 200, { ok: true, done: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true }, remaining: { ACCOUNT_KEY_SECRET: false, CRON_SECRET: false }, envSet: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true } }); }
     if (body.action === 'change-password') { dev.password = body.password; return json(res, 200, setupState()); }
     if (body.action === 'reset') { dev.accounts = []; dev.password = null; dev.pendingSecrets = false; dev.state = 'needs_setup'; return json(res, 200, { ok: true, deleted: 7, ...setupState() }); }
     return json(res, 400, { ok: false, error: 'bad_request' });
   }
 
-  if (url.pathname.startsWith('/api/') && !authed(url)) return json(res, 401, { ok: false, error: dev.password ? 'unauthorized' : 'setup_required' });
+  if (url.pathname.startsWith('/api/') && !authed(url, req)) return json(res, 401, { ok: false, error: dev.password ? 'unauthorized' : 'setup_required' });
 
   if (url.pathname === '/api/data') {
     const account = url.searchParams.get('account') || dev.accounts.find((a) => a.kind !== 'client')?.id || null;

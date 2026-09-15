@@ -107,13 +107,18 @@ function persistColsLocal() {
  * Data access
  * ------------------------------------------------------------------ */
 
+/**
+ * Authenticated fetch. The password travels ONLY in the x-report-key header
+ * (never `?key=` — a URL lands in logs, history and shared links); the
+ * selected account id rides in the query for the account-scoped routes.
+ */
 async function api(path, opts = {}) {
   const url = new URL(path, location.origin);
-  if (state.key) url.searchParams.set('key', state.key);
   if (ACCOUNT_SCOPED.has(url.pathname) && state.account) {
     url.searchParams.set('account', state.account);
   }
-  const res = await fetch(url, opts);
+  const headers = { ...(opts.headers || {}), ...(state.key ? { 'x-report-key': state.key } : {}) };
+  const res = await fetch(url, { ...opts, headers });
   if (res.status === 401) throw new Error('unauthorized');
   try {
     return { status: res.status, body: await res.json() };
