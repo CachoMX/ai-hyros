@@ -115,6 +115,26 @@ console.log('\nColumn catalog');
   check('native value survives derive', derive({ cost: 10, leads: 2, costPerLead: 99 }).costPerLead, 99);
 }
 
+console.log('\nTimezones the API may send (userProfile.timezone is a free string)');
+{
+  const { parseTimezone, ymdInTz, addDays } = await import('../api/_dates.js');
+  const { buildRanges } = await import('../api/_snapshot.js');
+  const at = new Date('2026-09-15T03:30:00Z');
+  check('-05:00 shifts the day back', buildRanges(at, '-05:00').today.start, '2026-09-14');
+  check('America/New_York honoured (EDT in September)', buildRanges(at, 'America/New_York').today.start, '2026-09-14');
+  check('UTC stays on the UTC day', buildRanges(at, 'UTC').today.start, '2026-09-15');
+  check('GMT-5 form', ymdInTz(at, 'GMT-5'), '2026-09-14');
+  check('bare -5 form', ymdInTz(at, '-5'), '2026-09-14');
+  check('+05:30 rolls forward', ymdInTz(at, '+05:30'), '2026-09-15');
+  check('Asia/Kolkata rolls forward', ymdInTz(at, 'Asia/Kolkata'), '2026-09-15');
+  check('Mars/Olympus falls back to UTC', buildRanges(at, 'Mars/Olympus').today.start, '2026-09-15');
+  check('Mars/Olympus is reported as not understood', parseTimezone('Mars/Olympus'), null);
+  check('empty timezone is reported as not understood', parseTimezone(''), null);
+  check('numeric offset parses to minutes', parseTimezone('-05:00')?.minutes, -300);
+  check('IANA parses as iana', parseTimezone('Europe/Madrid')?.kind, 'iana');
+  check('30d window is 30 days wide', buildRanges(at, 'UTC')['30d'].start, addDays('2026-09-15', -29));
+}
+
 console.log('\nDemo drills (client-side, public/demo.js)');
 {
   const { demoCohort, demoRecords, demoJourney } = await import('../public/demo.js');

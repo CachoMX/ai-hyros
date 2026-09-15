@@ -176,6 +176,15 @@ try {
   check('a failed ad-accounts call itself still fails the refresh', noList instanceof Error && /HTTP 500/.test(noList.message), noList?.message);
   mock.reset();
 
+  console.log('\nAccount timezone: IANA names work, nonsense is warned about, never silent UTC');
+  mock.timezone = 'America/New_York';
+  const snapNy = await buildSnapshot({ now: new Date('2026-09-14T02:30:00Z'), prefs });
+  check('IANA timezone builds the ranges on the local day (22:30 the day before in New York)', snapNy.ranges.today.start === '2026-09-13' && snapNy.account.timezone === 'America/New_York' && !snapNy.warnings.some((w) => /timezone/.test(w.error)), JSON.stringify([snapNy.ranges.today.start, snapNy.warnings]));
+  mock.timezone = 'Mars/Olympus';
+  const snapMars = await buildSnapshot({ now: new Date('2026-09-14T02:30:00Z'), prefs });
+  check('unknown timezone: UTC ranges + a kind error warning naming it', snapMars.ranges.today.start === '2026-09-14' && snapMars.warnings.some((w) => w.kind === 'error' && /timezone Mars\/Olympus not understood, using UTC/.test(w.error)), JSON.stringify(snapMars.warnings));
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });

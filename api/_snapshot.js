@@ -17,6 +17,7 @@
  */
 
 import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
+import { parseTimezone, ymdInTz, addDays } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
@@ -28,25 +29,7 @@ const REPORT_FIELDS = ['NAME', 'PARENT_NAME', ...CATALOG.map((c) => c.f)];
 
 /* ---------------- date helpers (account timezone) ---------------- */
 
-/** Offset like "-06:00" -> minutes. */
-function offsetMinutes(tz) {
-  const m = /^([+-])(\d{2}):(\d{2})$/.exec(tz || '');
-  if (!m) return 0;
-  const sign = m[1] === '-' ? -1 : 1;
-  return sign * (Number(m[2]) * 60 + Number(m[3]));
-}
-
-function ymdInTz(date, tz) {
-  const shifted = new Date(date.getTime() + offsetMinutes(tz) * 60_000);
-  return shifted.toISOString().slice(0, 10);
-}
-
-function addDays(ymd, days) {
-  const d = new Date(`${ymd}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
+/** Ranges are YYYY-MM-DD in the account timezone ("-05:00", "UTC", "America/New_York", … — see _dates.js). */
 export function buildRanges(now, tz) {
   const today = ymdInTz(now, tz);
   return {
@@ -464,6 +447,9 @@ export async function buildSnapshot({
     warnings.push({ adAccountId: acct ? String(acct.id) : null, name: acct?.name || null, type: acct?.type || null, level, error: String(error), kind });
     onProgress(`skip ${acct?.name || acct?.id || 'core'}: ${error}`);
   };
+  // The account timezone decides what "today" is; a value we cannot read
+  // falls back to UTC, but never quietly.
+  if (!parseTimezone(tz)) warn(null, null, `timezone ${tz} not understood, using UTC`, 'error');
   const reportable = accounts.filter((acct) => {
     if (LEVELS_BY_TYPE[acct.type]) return true;
     warn(acct, null, `no attribution report level for ad account type ${acct.type}`, 'unsupported');
