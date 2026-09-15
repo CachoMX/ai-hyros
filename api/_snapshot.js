@@ -425,7 +425,8 @@ export async function buildSnapshot({
 
   const only = (process.env.HYROS_AD_ACCOUNTS || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (only.length) accounts = accounts.filter((a) => only.includes(String(a.id)));
-  if (!accounts.length) throw new Error('No connected ad accounts returned by the MCP');
+  // Zero ad accounts is a CRM-only account, not a failure: the report is
+  // empty, the CRM is full. Only the ad-accounts call itself failing throws.
 
   const adAccountName = new Map(accounts.map((a) => [String(a.id), a.name]));
 
@@ -459,8 +460,7 @@ export async function buildSnapshot({
   // kind ∈ 'unsupported' | 'rate_limited' | 'error' | 'truncated' | 'time budget'.
   const warnings = [];
   const failed = new Set();
-  const reported = new Set();
-  const warn = (acct, level, error, kind = 'error') => {
+  const warn =(acct, level, error, kind = 'error') => {
     warnings.push({ adAccountId: acct ? String(acct.id) : null, name: acct?.name || null, type: acct?.type || null, level, error: String(error), kind });
     onProgress(`skip ${acct?.name || acct?.id || 'core'}: ${error}`);
   };
@@ -482,7 +482,6 @@ export async function buildSnapshot({
     if (failed.has(key)) return [];
     try {
       const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline: coreDeadline, timeoutMs: callTimeout() });
-      reported.add(id);
       if (truncated) warn(acct, level, `showing newest ${rows.length} rows${error ? ` (${error})` : ''}`, 'truncated');
       return rows;
     } catch (err) {
@@ -535,8 +534,8 @@ export async function buildSnapshot({
   }
   if (skippedKeys.length) warn(null, null, `range${skippedKeys.length > 1 ? 's' : ''} ${skippedKeys.join(', ')} skipped: time budget`, 'time budget');
 
-  // Nothing reported at all: surface the first failure instead of an empty dashboard.
-  if (!reported.size && !skippedKeys.length) throw new Error(warnings[0]?.error || 'No ad account could be reported');
+  // Nothing reported (unsupported-only account, every integration broken) is
+  // still a snapshot: empty levels + warnings say why, and the CRM is real.
 
   onProgress('crm');
   const today = ymdInTz(now, tz);

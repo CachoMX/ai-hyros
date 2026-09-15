@@ -162,6 +162,20 @@ try {
   check('truncated CRM lists are kind truncated warnings too', snapTr.warnings.some((w) => w.kind === 'truncated' && /leads/.test(w.error)) && snapTr.warnings.some((w) => w.kind === 'truncated' && /sales/.test(w.error) && /expired/.test(w.error)), JSON.stringify(snapTr.warnings.filter((w) => w.kind === 'truncated')));
   mock.reset();
 
+  console.log('\nCRM-only and unsupported-only accounts still build');
+  process.env.HYROS_AD_ACCOUNTS = '9006';
+  const onlyReddit = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs }).catch((e) => e);
+  check('unsupported-only account (REDDIT) builds instead of throwing', !(onlyReddit instanceof Error), onlyReddit?.message);
+  check('…with empty (not skipped) ranges, one unsupported warning and the full CRM', !(onlyReddit instanceof Error) && Object.values(onlyReddit.ranges).every((r) => r.levels.adset.length === 0 && r.skipped === undefined) && onlyReddit.warnings.filter((w) => w.kind === 'unsupported').length === 1 && onlyReddit.crm.leads.length === 3, JSON.stringify(onlyReddit?.warnings));
+  delete process.env.HYROS_AD_ACCOUNTS;
+  mock.adAccounts = [];
+  const crmOnly = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs }).catch((e) => e);
+  check('zero ad accounts (CRM-only account) builds', !(crmOnly instanceof Error) && crmOnly.adAccounts.length === 0 && crmOnly.ranges['30d'].levels.account.length === 0 && crmOnly.crm.leads.length === 3, crmOnly?.message);
+  mock.failNext({ tool: 'hyros_get_ad_accounts', status: 500, body: 'upstream exploded' });
+  const noList = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs }).catch((e) => e);
+  check('a failed ad-accounts call itself still fails the refresh', noList instanceof Error && /HTTP 500/.test(noList.message), noList?.message);
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });
