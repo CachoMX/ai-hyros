@@ -314,6 +314,61 @@ console.log('\nTracking Health: view');
   }
 }
 
+console.log('\nTracking Health: view says what each check did');
+{
+  const base = { checkedAt: '2026-09-14T12:00:00Z', domains: ['a.test', 'b.test'], scripts: {}, trackingParams: [], errors: [] };
+  const OK = { status: 'ok', ms: 412 };
+  const withGoogle = { ...snap, adAccounts: [{ id: '9002', name: 'G', type: 'GOOGLE' }], warnings: [] };
+  const noGoogle = { ...snap, adAccounts: [{ id: '9001', name: 'Meta', type: 'FACEBOOK' }], warnings: [] };
+  const tile = (c, label) => c.seen.find((k) => k.label === label) || {};
+  /** The HTML with every element carrying a `sub` class (incl. kpi-sub) removed — what is left is normal-size text. */
+  const outsideSub = (html) => html.replace(/<(\w+)[^>]*class="[^"]*sub[^"]*"[^>]*>[\s\S]*?<\/\1>/g, '');
+  const render = (block, snapshot = withGoogle) => { const c = viewCtx('health', block, { snapshot }); const err = renders(renderHealth, c); return { c, err, html: c.root.innerHTML }; };
+
+  const sk = render({ ...base, checks: { domains: OK, script: { status: 'skipped', reason: 'time budget' }, params: { status: 'skipped', reason: 'time budget' } } });
+  check('skipped: renders', !sk.err, sk.err?.message);
+  check('KPI "Script present": "—" with sub "skipped: time budget"', tile(sk.c, 'Script present').value === '—' && tile(sk.c, 'Script present').sub === 'skipped: time budget', JSON.stringify(tile(sk.c, 'Script present')));
+  check('KPI "Ads missing tracking params": "—" with sub "skipped: time budget"', tile(sk.c, 'Ads missing tracking params').value === '—' && tile(sk.c, 'Ads missing tracking params').sub === 'skipped: time budget', JSON.stringify(tile(sk.c, 'Ads missing tracking params')));
+  check('script panel: "Skipped this refresh (time budget) — press Refresh again"', /Skipped this refresh \(time budget\) — press Refresh again/.test(sk.html), sk.html.slice(0, 200));
+  check('params panel: skipped, and never "No ads reported"', (sk.html.match(/Skipped this refresh \(time budget\)/g) || []).length === 2 && !/No ads reported/.test(sk.html));
+  check('KPI "Check errors" is 0 — skips are not errors', tile(sk.c, 'Check errors').value === fmt.int(0), JSON.stringify(tile(sk.c, 'Check errors')));
+
+  const reason = 'HYROS did not answer within 45s (the check fetches every domain live)';
+  const fl = render({ ...base, errors: [`script: ${reason}`, 'params SEARCH: boom <x>'], checks: { domains: OK, script: { status: 'failed', reason, ms: 45001 }, params: { status: 'failed', reason: 'SEARCH: boom <x>', channels: { SEARCH: 'failed', PERFORMANCE_MAX: 'skipped' } } } });
+  check('failed: renders', !fl.err, fl.err?.message);
+  check('KPI "Check errors": value 2, sub names the first error', tile(fl.c, 'Check errors').value === fmt.int(2) && /^script: HYROS did not answer/.test(tile(fl.c, 'Check errors').sub || ''), JSON.stringify(tile(fl.c, 'Check errors')));
+  check('KPI "Script present": "—" with sub "failed: <short reason>"', tile(fl.c, 'Script present').value === '—' && tile(fl.c, 'Script present').sub === 'failed: HYROS did not answer within 45s', JSON.stringify(tile(fl.c, 'Script present')));
+  check('KPI "Ads missing tracking params": "—" with sub "failed: …"', tile(fl.c, 'Ads missing tracking params').value === '—' && /^failed: SEARCH: boom/.test(tile(fl.c, 'Ads missing tracking params').sub || ''), JSON.stringify(tile(fl.c, 'Ads missing tracking params')));
+  const visible = outsideSub(fl.html);
+  check('every error is listed OUTSIDE any .sub element (normal size), escaped', visible.includes(esc(reason)) && visible.includes('boom &lt;x&gt;') && !/<x>/.test(fl.html), visible.slice(0, 300));
+  check('a visible "Check errors" list with a .pill.bad per check name', /Check errors/.test(visible) && /class="pill bad">script</.test(visible) && /class="pill bad">params SEARCH</.test(visible), visible.slice(0, 300));
+  check('script panel: "Check failed: <reason>"', /Check failed: HYROS did not answer within 45s/.test(fl.html));
+  check('params panel: "Check failed: <reason>", never "No ads reported"', /Check failed: SEARCH: boom &lt;x&gt;/.test(fl.html) && !/No ads reported/.test(fl.html));
+
+  const em = render({ ...base, checks: { domains: OK, script: OK, params: { status: 'empty', ms: 300, channels: { SEARCH: 'empty', PERFORMANCE_MAX: 'empty' } } } });
+  check('params empty: "No ads reported by the check in the last hour" — only then', /No ads reported by the check in the last hour/.test(em.html) && tile(em.c, 'Ads missing tracking params').value === '—', em.html.slice(0, 100));
+  const ng = render({ ...base, scripts: { 'https://a.test/': 'SCRIPT_FOUND' }, checks: { domains: OK, script: OK, params: { status: 'skipped', reason: 'no Google ad accounts connected' } } }, noGoogle);
+  check('no Google ad account: "No Google ad accounts connected — nothing to check", no skip banner', /No Google ad accounts connected — nothing to check/.test(ng.html) && !/Skipped this refresh/.test(ng.html) && !/No ads reported/.test(ng.html), ng.html.slice(0, 100));
+  const gSkip = render({ ...base, checks: { domains: OK, script: OK, params: { status: 'skipped', reason: 'time budget' } } }, noGoogle);
+  check('no Google ad account wins over a skipped params check', /No Google ad accounts connected/.test(gSkip.html));
+  const nd = render({ ...base, domains: [], checks: { domains: { status: 'empty', ms: 90 }, script: { status: 'skipped', reason: 'no verified domains' }, params: OK } });
+  check('no verified domains: KPI sub + panel say so', tile(nd.c, 'Script present').sub === 'no verified domains' && /No verified domains on this account — add one in HYROS/.test(nd.html), JSON.stringify(tile(nd.c, 'Script present')));
+
+  const stale = render({ ...base, scripts: { 'https://a.test/': 'SCRIPT_FOUND', 'https://b.test/': 'SCRIPT_NOT_FOUND' }, errors: [`script: ${reason}`], checks: { domains: OK, script: { status: 'failed', reason, ms: 45001, stale: true, checkedAt: '2026-08-29T10:00:00Z' }, params: OK } });
+  check('carried-forward scripts: rows render with a "previous check · <date>" pill', /class="pill">previous check · /.test(stale.html) && stale.html.includes(esc(fmt.datetime('2026-08-29T10:00:00Z'))) && /script not found/.test(stale.html), stale.html.slice(0, 200));
+  check('...and the panel still says the check failed this refresh', /Check failed: HYROS did not answer/.test(stale.html));
+
+  const good = render({ ...base, scripts: { 'https://a.test/': 'SCRIPT_FOUND', 'https://b.test/': 'SCRIPT_NOT_FOUND' }, trackingParams: [{ type: 'SEARCH', rows: [{ adName: 'x', valid: false, missing: ['gclid'] }] }, { type: 'PERFORMANCE_MAX', rows: [{ adName: 'y', valid: true }] }], checks: { domains: OK, script: OK, params: { ...OK, channels: { SEARCH: 'ok', PERFORMANCE_MAX: 'ok' } } } });
+  check('all ok: "Script present" = "1 / 2", sub names the domains checked', tile(good.c, 'Script present').value === '1 / 2' && /2 domains checked/.test(tile(good.c, 'Script present').sub), JSON.stringify(tile(good.c, 'Script present')));
+  check('all ok: params sub names the channels checked', /checked: SEARCH, PERFORMANCE_MAX/.test(tile(good.c, 'Ads missing tracking params').sub), JSON.stringify(tile(good.c, 'Ads missing tracking params')));
+  check('all ok: no "Check errors" panel, no skipped/failed wording', !/<h3>Check errors<\/h3>/.test(good.html) && !/Skipped this refresh|Check failed/.test(good.html));
+  const mixed = render({ ...good.c.block, checks: { ...good.c.block.checks, params: { status: 'ok', ms: 1, channels: { SEARCH: 'ok', PERFORMANCE_MAX: 'skipped' } } } });
+  check('mixed channels: sub says which ran and which did not', tile(mixed.c, 'Ads missing tracking params').sub === 'SEARCH checked · PERFORMANCE_MAX skipped', JSON.stringify(tile(mixed.c, 'Ads missing tracking params')));
+
+  const legacy = render({ ...base, scripts: { 'https://a.test/': 'SCRIPT_FOUND' }, errors: ['params SEARCH: skipped (time budget)'] });
+  check('block from before `checks` existed still renders with sensible tiles', !legacy.err && tile(legacy.c, 'Script present').value === '1 / 1', legacy.err?.message || JSON.stringify(tile(legacy.c, 'Script present')));
+}
+
 // ---------------------------------------------------------------------------
 console.log('\nTemplate, Funnel, Ad LTV: block states');
 {
