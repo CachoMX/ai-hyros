@@ -123,6 +123,12 @@ export function normalizeSettings(raw = {}) {
 
 /** Attribution rows per level per range: 8 pages × 250 before the newest-N warning. */
 const ATTRIBUTION_MAX_PAGES = 8;
+/** Per-call timeout for the attribution report (Vercel kills the function at 60 s; the build budget is 52 s). */
+export const ATTRIBUTION_TIMEOUT_MS = 15000;
+/** Budget kept back for the CRM pull: attribution calls stop when less than this remains. */
+const CRM_RESERVE_MS = 12000;
+/** A call is never started with less than this on the clock. */
+const MIN_CALL_MS = 1000;
 
 /**
  * One level of one ad account for one range, paged to completion (or to the
@@ -227,13 +233,15 @@ export function mergeLeads(previousLeads, changedLeads, leadsFrom) {
     .sort((a, b) => String(b.joined || '').localeCompare(String(a.joined || '')));
 }
 
-async function buildCrm({ leadsFrom, leadsTo, previous = null }) {
+async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null }) {
   // Incremental: when the previous snapshot is recent enough, pull only the
   // leads updated since it was built (a lead's lastUpdatedDate moves on
   // creation too, so new joins are included). Sales/calls/subscriptions have
-  // no updated-since filter yet and are pulled in full.
+  // no updated-since filter yet and are pulled in full. A stale (reused) CRM
+  // keeps sync.syncedAt from the build that really pulled, so that is the base.
   const prevLeads = previous?.crm?.leads;
-  const prevAt = previous?.generatedAt ? String(previous.generatedAt).slice(0, 10) : null;
+  const prevSynced = previous?.crm?.sync?.syncedAt || previous?.generatedAt;
+  const prevAt = prevSynced ? String(prevSynced).slice(0, 10) : null;
   const incremental = Array.isArray(prevLeads) && prevAt && prevAt >= addDays(leadsFrom, 1)
     && previous?.crm?.window?.from === leadsFrom;
   const leadsRequest = incremental
@@ -339,7 +347,7 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null }) {
     subscriptions,
     stages: stagesRaw.map((s) => ({ name: s.name, amount: s.amount })),
     window: { from: leadsFrom, to: leadsTo },
-    sync: { incremental, leadsFetched: fetchedLeads.length },
+    sync: { incremental, leadsFetched: fetchedLeads.length, syncedAt: now.toISOString() },
     totals: {
       leads: leads.length,
       attributed: leads.filter((l) => l.hasAttribution).length,
@@ -425,12 +433,19 @@ export async function buildSnapshot({
     warn(acct, null, `no attribution report level for ad account type ${acct.type}`, 'unsupported');
     return false;
   });
+  // Time budget. Attribution calls stop when the CRM reserve is reached;
+  // a call never runs past the overall deadline (its timeout shrinks).
+  const reserveMs = Math.min(CRM_RESERVE_MS, Math.floor(budgetMs / 4));
+  const coreDeadline = deadline - reserveMs;
+  const outOfTime = () => Date.now() >= coreDeadline;
+  const callTimeout = () => Math.min(ATTRIBUTION_TIMEOUT_MS, Math.max(MIN_CALL_MS, deadline - Date.now()));
+
   const fetchLevelSafe = async (acct, level, range) => {
     const id = String(acct.id);
     const key = `${id}:${level}`;
     if (failed.has(key)) return [];
     try {
-      const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline });
+      const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline: coreDeadline, timeoutMs: callTimeout() });
       reported.add(id);
       if (truncated) warn(acct, level, `showing newest ${rows.length} rows${error ? ` (${error})` : ''}`, 'truncated');
       return rows;
@@ -439,24 +454,42 @@ export async function buildSnapshot({
       // A 429 is the account's shared budget, not this level being broken:
       // warn, and try again on the next range instead of blacklisting.
       if (err?.code === 'rate_limited') { warn(acct, level, err.message, 'rate_limited'); return []; }
+      // A timeout at the deadline is our budget, not the level.
+      if (err?.code === 'timeout' && outOfTime()) { warn(acct, level, err.message, 'time budget'); return []; }
       failed.add(key);
       warn(acct, level, err?.message || err, /unsupported level/i.test(err?.message || '') ? 'unsupported' : 'error');
       return [];
     }
   };
 
+  // A range the budget did not reach: same shape, empty, marked. Rows fetched
+  // for a range that was cut mid-way are discarded rather than presented as
+  // that range's totals.
+  const skippedRange = (range) => ({
+    ...range, skipped: 'time budget',
+    levels: buildLevels({ adsetRows: [], adRows: [], sourceById, adAccountName }),
+    totals: aggregate([]),
+  });
+  const skippedKeys = [];
+
   for (const [key, range] of Object.entries(ranges)) {
+    if (outOfTime()) { out[key] = skippedRange(range); skippedKeys.push(key); continue; }
     onProgress(`range ${key}`);
     const adsetRows = [];
     const adRows = [];
+    let cut = false;
     for (const acct of reportable) {
       const { adset, ad } = LEVELS_BY_TYPE[acct.type];
       // Sequential per account: the MCP limit is per HYROS account (30/s,
       // 1000/min, shared by every key of the account and by an agency's
       // clients), so parallel fan-out here only trades rows for 429s.
+      if (outOfTime()) { cut = true; break; }
       adsetRows.push(...await fetchLevelSafe(acct, adset, range));
-      if (ad) adRows.push(...await fetchLevelSafe(acct, ad, range));
+      if (!ad) continue;
+      if (outOfTime()) { cut = true; break; }
+      adRows.push(...await fetchLevelSafe(acct, ad, range));
     }
+    if (cut) { out[key] = skippedRange(range); skippedKeys.push(key); continue; }
     const levels = buildLevels({ adsetRows, adRows, sourceById, adAccountName });
     out[key] = {
       ...range,
@@ -464,13 +497,24 @@ export async function buildSnapshot({
       totals: aggregate(adsetRows),
     };
   }
+  if (skippedKeys.length) warn(null, null, `range${skippedKeys.length > 1 ? 's' : ''} ${skippedKeys.join(', ')} skipped: time budget`, 'time budget');
 
   // Nothing reported at all: surface the first failure instead of an empty dashboard.
-  if (!reported.size) throw new Error(warnings[0]?.error || 'No ad account could be reported');
+  if (!reported.size && !skippedKeys.length) throw new Error(warnings[0]?.error || 'No ad account could be reported');
 
   onProgress('crm');
   const today = ymdInTz(now, tz);
-  const crm = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous });
+  const prevCrm = previous?.crm;
+  let crm;
+  if (Array.isArray(prevCrm?.leads) && deadline - Date.now() < reserveMs) {
+    // Not enough budget for a CRM pull: keep the last one, marked stale, so
+    // the tab never goes blank. Its sync.syncedAt stays the real sync time,
+    // which is what the next incremental pull is based on.
+    crm = { ...prevCrm, sync: { ...(prevCrm.sync || {}), stale: true, skipped: 'time budget' } };
+    warn(null, null, 'CRM not refreshed: time budget (showing the previous sync)', 'time budget');
+  } else {
+    crm = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline });
+  }
 
   // Feature server steps (Scale Advisor, Tracking Health, anything a user
   // adds under public/features/) — best-effort inside the remaining budget.

@@ -94,8 +94,10 @@ try {
   const curves = snap.scale.curves;
   check('scale: accounts + top ad sets analyzed', curves.length === snap.adAccounts.length + Math.min(6, snap.ranges['30d'].levels.adset.length), String(curves.length));
   check('scale: curve points normalized', curves[0].points.length === 5 && curves[0].points[0].spend === 20);
-  check('scale: saturation spend parsed', curves[0].saturationSpend === 70);
-  check('scale: account call passed cacCeiling', calls.find((c) => c.name === 'hyros_get_marginal_cac_curve')?.args.request.cacCeiling > 0);
+  check('scale: saturation spend parsed', snap.scale.curves.find((c) => c.level === 'SOURCE_LINK')?.saturationSpend === 70, JSON.stringify(snap.scale.curves.find((c) => c.level === 'SOURCE_LINK')?.saturationSpend));
+  // An account-level curve has no ceiling unless the user set one (docs: the
+  // ceiling is the caller's or none) — a fabricated $100 would invent a saturation point.
+  check('scale: account call sends no cacCeiling when HYROS_CAC_CEILING is unset', calls.find((c) => c.name === 'hyros_get_marginal_cac_curve' && c.args.request.level === 'ACCOUNT')?.args.request.cacCeiling === undefined, JSON.stringify(calls.find((c) => c.name === 'hyros_get_marginal_cac_curve' && c.args.request.level === 'ACCOUNT')?.args.request));
 
   check('health: domains listed', snap.health.domains.length === 2);
   check('health: script presence per URL', snap.health.scripts['https://mock.example.test/'] === 'SCRIPT_FOUND');
@@ -124,6 +126,27 @@ try {
   const snapCap = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
   const capWarn = snapCap.warnings.find((w) => w.kind === 'truncated' && w.level === 'FACEBOOK_ADSET');
   check('past the page cap: newest rows kept + kind truncated warning', snapCap.ranges['30d'].levels.adset.length === 2000 && /showing newest 2000 rows/.test(capWarn?.error || ''), `${snapCap.ranges['30d'].levels.adset.length} ${JSON.stringify(capWarn)}`);
+  mock.reset();
+
+  console.log('\nCore time budget: slow attribution calls never run past budgetMs');
+  const { ATTRIBUTION_TIMEOUT_MS } = await import('../api/_snapshot.js');
+  check('attribution call timeout is at most 15 s', ATTRIBUTION_TIMEOUT_MS <= 15000, String(ATTRIBUTION_TIMEOUT_MS));
+  mock.adAccounts = [{ id: '9001', name: 'Mock Meta', type: 'FACEBOOK' }];
+  mock.latencyMs = { hyros_get_attribution_report: 1500 };
+  calls.length = 0;
+  const tBudget = Date.now();
+  const snapSlow = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, budgetMs: 9000 });
+  const slowMs = Date.now() - tBudget;
+  check('build returns inside the budget (+2 s grace)', slowMs < 11000, `${slowMs}ms`);
+  const skippedRanges = Object.entries(snapSlow.ranges).filter(([, r]) => r.skipped === 'time budget');
+  check('unfetched ranges are marked skipped: time budget with empty levels', skippedRanges.length >= 1 && skippedRanges.every(([, r]) => r.levels.adset.length === 0 && r.levels.ad.length === 0 && r.totals.cost === 0), JSON.stringify(Object.entries(snapSlow.ranges).map(([k, r]) => [k, r.skipped || 'ok'])));
+  check('the first range was still fetched', snapSlow.ranges.today.skipped === undefined && snapSlow.ranges.today.levels.adset.length === 3, JSON.stringify(snapSlow.ranges.today.skipped));
+  check('a kind "time budget" warning names the skipped ranges', snapSlow.warnings.some((w) => w.kind === 'time budget' && /range/.test(w.error)), JSON.stringify(snapSlow.warnings));
+  check('CRM still built when there is no previous to reuse', snapSlow.crm.leads.length === 3 && snapSlow.crm.sync.stale === undefined);
+  calls.length = 0;
+  const snapStale = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 5000 });
+  check('near the deadline the previous CRM is reused, marked stale, no CRM calls', snapStale.crm.sync.stale === true && snapStale.crm.leads.length === 3 && !calls.some((c) => c.name === 'hyros_get_leads'), JSON.stringify({ sync: snapStale.crm.sync, leadsCalls: calls.filter((c) => c.name === 'hyros_get_leads').length }));
+  check('stale CRM is a kind "time budget" warning', snapStale.warnings.some((w) => w.kind === 'time budget' && /CRM/.test(w.error)), JSON.stringify(snapStale.warnings));
   mock.reset();
 
   console.log('\nIncremental build (previous snapshot present)');
