@@ -19,6 +19,7 @@
 import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
 import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd, parseHyrosDate, offsetSuffix } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
+import { TEMPLATE_VERSION } from './_version.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
 // Request the ENTIRE catalog: the `fields` param drives computation (verified
@@ -601,6 +602,7 @@ export async function buildSnapshot({
 
   return {
     schema: 2,
+    templateVersion: TEMPLATE_VERSION,
     generatedAt: new Date().toISOString(),
     origin: 'mcp',
     attributionModel: model,

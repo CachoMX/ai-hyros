@@ -14,6 +14,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { callTool, runWithKey } from './_mcp.js';
 import { readAccounts, writeAccounts, deleteAccountData, readSnapshot, storeConfigured, PRIMARY_ID } from './_store.js';
 import { keySecrets } from './_setup.js';
+import { logEvent } from './_log.js';
 
 export { PRIMARY_ID };
 
@@ -86,7 +87,15 @@ export async function listAccounts({ withStatus = false } = {}) {
 
 /** Validate a key against the MCP and learn the account label + agency clients from it. */
 export async function probeKey(apiKey, extra = {}) {
-  const user = await runWithKey(apiKey, () => callTool('hyros_get_user_info', {}, { timeoutMs: 15000 }), extra);
+  const started = Date.now();
+  let user;
+  try {
+    user = await runWithKey(apiKey, () => callTool('hyros_get_user_info', {}, { timeoutMs: 15000 }), extra);
+  } catch (err) {
+    // Setup / import / sync failures leave a trace (codes and timings only, never the key).
+    logEvent('probe.failed', { code: err.code || err.name || 'error', message: err.message, client: extra.accessibleAccountId || null, mode: extra.clientMode || null, ms: Date.now() - started });
+    throw err;
+  }
   const p = user?.userProfile || {};
   const clients = (Array.isArray(user?.accessibleAccounts) ? user.accessibleAccounts : []).map((c) => ({
     accountId: c.accountId ? String(c.accountId) : null, email: c.email || null, company: c.companyName || null,
@@ -184,7 +193,12 @@ export async function syncClients(agencyId) {
   if (!agency) return null;
   let info;
   try { info = await probeKey(decryptKey(agency.keyEnc)); }
-  catch (err) { if (err.code === 'auth') await markKeyStatus(agencyId, 'invalid', err.message); throw err; }
+  catch (err) {
+    logEvent('sync.failed', { accountId: agencyId, code: err.code || err.name || 'error', message: err.message });
+    // Only a rejected key (401) invalidates the agency; a 403 is a refresh error, not a bad key.
+    if (err.code === 'auth') await markKeyStatus(agencyId, 'invalid', err.message);
+    throw err;
+  }
   const seen = new Set();
   let added = 0;
   for (const c of info.clients) {

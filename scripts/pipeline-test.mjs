@@ -68,6 +68,8 @@ try {
   check('report request carries leadStage', JSON.stringify(report?.leadStage) === '["Customer"]');
   check('report request uses newestFirst', report?.newestFirst === true);
   check('snapshot records settings', snap.settings.windowDays === 14 && snap.settings.leadStage[0] === 'Customer');
+  const { TEMPLATE_VERSION } = await import('../api/_version.js');
+  check('snapshot carries templateVersion', snap.templateVersion === TEMPLATE_VERSION && /^\d+\.\d+\.\d+$/.test(snap.templateVersion), String(snap.templateVersion));
   check('attribution dates are ISO datetimes with the account offset (docs example 2021-04-16T20:35:00-05:00)', report?.startDate === '2026-09-14T00:00:00-05:00' && report?.endDate === '2026-09-14T23:59:59-05:00', JSON.stringify([report?.startDate, report?.endDate]));
   const leadsFull = calls.find((c) => c.name === 'hyros_get_leads')?.args.request;
   const salesFull = calls.find((c) => c.name === 'hyros_get_sales')?.args.request;
@@ -308,12 +310,38 @@ try {
   const fakeRes = () => { const r = { status(c) { r.code = c; return r; }, json(b) { r.body = b; return r; }, setHeader() {} }; return r; };
   process.env.CRON_SECRET = 'cron-s';
   const refresh = (await import('../api/refresh.js')).default;
+  // Structured event log (api/_log.js writes one JSON line per event to stderr).
+  const logLines = [];
+  const origConsoleError = console.error;
+  console.error = (line) => { logLines.push(String(line)); };
+  const events = (evt) => logLines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((e) => e?.evt === evt);
   mock.failNext({ status: 403, body: { result: 'ERROR', message: 'Not authorized: account c1 is not one of your connected client accounts.' } });
   let rr = fakeRes();
   await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
   check('refresh answers 502 forbidden on a client 403', rr.code === 502 && rr.body?.error === 'forbidden', JSON.stringify(rr.body));
+  check('refresh.failed logged with accountId, code, message, ms (no key material)', events('refresh.failed').some((e) => e.accountId === cli.id && e.code === 'forbidden' && /Not authorized/.test(e.message) && typeof e.ms === 'number') && !logLines.some((l) => /agency-key/.test(l)), JSON.stringify(events('refresh.failed')));
   const after403 = await acc.listAccounts();
   check('agency key NOT marked invalid by a client 403; lastError recorded', after403.find((a) => a.id === added.account.id).keyStatus === 'ok' && /Not authorized/.test(after403.find((a) => a.id === cli.id).lastError || ''), JSON.stringify(after403.map((a) => [a.id, a.keyStatus, a.lastError])));
+  rr = fakeRes();
+  await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
+  check('a good refresh reports storeConfigured + persisted and logs refresh.ok with the warning count', rr.code === 200 && rr.body?.ok === true && rr.body.storeConfigured === true && rr.body.persisted === true && events('refresh.ok').some((e) => e.accountId === cli.id && typeof e.ms === 'number' && e.warnings === 3), JSON.stringify([rr.body?.storeConfigured, rr.body?.persisted, events('refresh.ok')]));
+  // Cron loop: clients of an agency whose accessible_account_id mode is unsupported are skipped, not retried daily.
+  const reg = await store.readAccounts();
+  reg.find((a) => a.id === added.account.id).clientModeStatus = 'unsupported';
+  await store.writeAccounts(reg);
+  calls.length = 0;
+  rr = fakeRes();
+  await refresh({ url: '/api/refresh', headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
+  const cronClients = (rr.body?.accounts || []).filter((a) => a.id.startsWith('cli_'));
+  check('cron skips unsupported-mode clients with a reason and makes no MCP call for them', rr.body?.cron === true && cronClients.length === 6 && cronClients.every((a) => a.skipped === 'unsupported') && !calls.some((c) => c.client), JSON.stringify(rr.body?.accounts));
+  check('cron still refreshed the agency itself', (rr.body?.accounts || []).some((a) => a.id === added.account.id && a.ok === true), JSON.stringify(rr.body?.accounts));
+  const reg2 = await store.readAccounts();
+  reg2.find((a) => a.id === added.account.id).clientModeStatus = 'verified';
+  await store.writeAccounts(reg2);
+  mock.failNext({ status: 401, body: { error: 'invalid api key' } });
+  const probeFail = await acc.probeKey('whatever-key').catch((e) => e);
+  check('probe.failed logged for a rejected key', probeFail?.code === 'auth' && events('probe.failed').some((e) => e.code === 'auth' && typeof e.ms === 'number'), JSON.stringify(events('probe.failed')));
+  console.error = origConsoleError;
   mock.failNext({ status: 401, body: { error: 'invalid api key' } });
   rr = fakeRes();
   await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);

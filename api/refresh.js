@@ -3,17 +3,28 @@
  *
  * Triggered by Vercel Cron daily (Authorization: Bearer $CRON_SECRET) or
  * on demand from the dashboard's Refresh button (password-gated).
+ *
+ * Every outcome is a structured log line (api/_log.js): `refresh.ok` with
+ * the timing and warning count, `refresh.failed` with the error code — the
+ * only trace a template owner has when a user reports "it failed".
  */
 import { checkAccess, isCron, deny } from './_auth.js';
 import { buildSnapshot } from './_snapshot.js';
 import { writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw } from './_store.js';
 import { McpNotConfigured } from './_mcp.js';
 import { accountFromReq, asAccount, listAccounts, markKeyStatus, noteRefresh, syncClients } from './_accounts.js';
+import { logEvent } from './_log.js';
 
 export const maxDuration = 60;
 
+/** Cron: the whole run must fit the function; the last account needs at least this much. */
+const CRON_BUDGET_MS = 55000;
+const CRON_MIN_ACCOUNT_MS = 20000;
+const CRON_ACCOUNT_BUDGET_MS = 50000;
+
 /** Build + persist one account's snapshot under its own key. */
 async function refreshAccount(accountId, steps, budgetMs) {
+  const started = Date.now();
   const [prefs, previous] = storeConfigured()
     ? await Promise.all([readPrefs(accountId), readSnapshot(accountId)])
     : [null, null];
@@ -22,8 +33,11 @@ async function refreshAccount(accountId, steps, budgetMs) {
     snapshot = await asAccount(accountId, () =>
       buildSnapshot({ onProgress: (s) => steps.push(`${accountId}: ${s}`), prefs, previous, budgetMs }));
   } catch (err) {
-    // A rejected key marks the account (or its agency) invalid so the
-    // selector can say so instead of 40 clients failing one by one.
+    logEvent('refresh.failed', { accountId, code: err.code || err.name || 'error', message: err.message, ms: Date.now() - started });
+    // Only a rejected key (401) marks the account (or its agency) invalid so
+    // the selector can say so instead of 40 clients failing one by one. A
+    // 403 (missing role, client not authorized) is recorded as the last
+    // error but never flips the key status.
     if (storeConfigured()) {
       if (err.code === 'auth') await markKeyStatus(accountId, 'invalid', err.message);
       await noteRefresh(accountId, false, err.message);
@@ -32,7 +46,24 @@ async function refreshAccount(accountId, steps, budgetMs) {
   }
   const persisted = storeConfigured() ? await writeSnapshot(snapshot, accountId) : false;
   if (storeConfigured()) { await markKeyStatus(accountId, 'ok'); await noteRefresh(accountId, true); }
+  logEvent('refresh.ok', { accountId, ms: Date.now() - started, warnings: snapshot.warnings?.length || 0, persisted });
   return { snapshot, persisted };
+}
+
+/**
+ * Cron with no ?account=: which accounts to refresh, stalest first. Clients
+ * of an agency whose accessible_account_id mode is unsupported cannot be
+ * read at all, so they are listed as skipped instead of failing daily.
+ */
+function cronTargets(listed) {
+  const byId = new Map(listed.map((a) => [a.id, a]));
+  const unsupported = (a) => a.parentId && byId.get(a.parentId)?.clientModeStatus === 'unsupported';
+  const candidates = listed.filter((a) => a.keyStatus !== 'invalid' && a.status === 'APPROVED');
+  return {
+    skipped: candidates.filter(unsupported).map((a) => ({ id: a.id, skipped: 'unsupported' })),
+    accounts: candidates.filter((a) => !unsupported(a))
+      .sort((a, b) => String(a.lastRefresh || '').localeCompare(String(b.lastRefresh || ''))),
+  };
 }
 
 export default async function handler(req, res) {
@@ -60,15 +91,13 @@ export default async function handler(req, res) {
     for (const a of listed.filter((x) => x.agency && x.keyStatus !== 'invalid')) {
       try { synced.push({ id: a.id, ...(await syncClients(a.id)) }); } catch (err) { synced.push({ id: a.id, error: err.message }); }
     }
-    const accounts = (await listAccounts({ withStatus: true }))
-      .filter((a) => a.keyStatus !== 'invalid' && a.status === 'APPROVED')
-      .sort((a, b) => String(a.lastRefresh || '').localeCompare(String(b.lastRefresh || '')));
-    const done = [];
+    const { accounts, skipped } = cronTargets(await listAccounts({ withStatus: true }));
+    const done = [...skipped];
     for (const a of accounts) {
-      const left = 55000 - (Date.now() - started);
-      if (left < 20000) { done.push({ id: a.id, skipped: 'time budget' }); continue; }
+      const left = CRON_BUDGET_MS - (Date.now() - started);
+      if (left < CRON_MIN_ACCOUNT_MS) { done.push({ id: a.id, skipped: 'time budget' }); continue; }
       try {
-        const { persisted } = await refreshAccount(a.id, steps, Math.min(50000, left - 5000));
+        const { persisted } = await refreshAccount(a.id, steps, Math.min(CRON_ACCOUNT_BUDGET_MS, left - 5000));
         done.push({ id: a.id, ok: true, persisted });
       } catch (err) { done.push({ id: a.id, ok: false, error: err.message }); }
     }
@@ -87,12 +116,14 @@ export default async function handler(req, res) {
       ok: true,
       account: accountId,
       persisted,
+      storeConfigured: storeConfigured(),
       warning: storeConfigured()
         ? undefined
         : 'KV is not configured, so this snapshot was not stored. Set KV_REST_API_URL / KV_REST_API_TOKEN.',
       ms: Date.now() - started,
       steps,
       generatedAt: snapshot.generatedAt,
+      templateVersion: snapshot.templateVersion,
       settings: snapshot.settings,
       counts: {
         adAccounts: snapshot.adAccounts.length,
@@ -100,6 +131,7 @@ export default async function handler(req, res) {
         leads: snapshot.crm.leads.length,
         leadsFetched: snapshot.crm.sync?.leadsFetched,
         incremental: snapshot.crm.sync?.incremental,
+        warnings: snapshot.warnings?.length || 0,
         curves: snapshot.scale?.curves?.length ?? 0,
       },
     });
@@ -110,6 +142,7 @@ export default async function handler(req, res) {
       error: err.code || err.name || 'error',
       message: err.message,
       detail: err.detail ?? undefined,
+      storeConfigured: storeConfigured(),
       steps,
       ms: Date.now() - started,
     });
