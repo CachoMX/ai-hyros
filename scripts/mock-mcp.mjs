@@ -10,6 +10,11 @@
  * Every request is logged (tool name + the request fields the pipeline
  * sends) so a test can assert WHAT the pipeline asked for, not just what it
  * rendered.
+ *
+ * The exported `mock` control object lets a test bend the server the way the
+ * real one misbehaves (api-docs.hyros.com): HTTP 429 with `Retry-After`,
+ * HTTP 403 for a missing role, multi-page results, an expired cursor on
+ * page 2, latency, a different ad-account list, a different user timezone.
  */
 import { createServer } from 'node:http';
 
@@ -18,6 +23,31 @@ export const calls = [];
 
 /** A tool-level failure: the dispatcher turns it into an isError reply, like the real MCP. */
 class ToolError extends Error {}
+
+/**
+ * Test controls. Everything resets with `mock.reset()`.
+ *   mock.failNext({ tool, status, body, retryAfter, times })  HTTP-level failure(s) for the next call(s)
+ *   mock.pages(tool, n, size)     serve n pages of `size` rows with nextPageId
+ *   mock.expireCursorOn(tool)     tool error "pageId ... expired" as soon as a pageId is sent
+ *   mock.latencyMs = 4000         delay every tool call (number) or per tool ({ tool: ms })
+ *   mock.adAccounts = []          replace the ad-account list
+ *   mock.timezone = 'America/New_York'   userProfile.timezone
+ */
+export const mock = {
+  failures: [],
+  paged: {},
+  expiredCursors: new Set(),
+  latencyMs: 0,
+  adAccounts: null,
+  timezone: null,
+  failNext(spec) { this.failures.push({ times: 1, ...spec }); },
+  pages(tool, n, size = 250) { this.paged[tool] = { n, size }; },
+  expireCursorOn(tool) { this.expiredCursors.add(tool); },
+  reset() {
+    this.failures = []; this.paged = {}; this.expiredCursors = new Set();
+    this.latencyMs = 0; this.adAccounts = null; this.timezone = null;
+  },
+};
 
 // Ad accounts of every type the real MCP reports, plus one that is connected
 // but broken (9007) so the pipeline's per-account isolation is exercised.
@@ -30,6 +60,7 @@ const AD_ACCOUNTS = [
   { id: '9006', name: 'Mock Reddit', type: 'REDDIT' },
   { id: '9007', name: 'Mock TikTok (broken)', type: 'TIKTOK' },
 ];
+const adAccounts = () => mock.adAccounts ?? AD_ACCOUNTS;
 
 // The `level` enum of GET /attribution (api-docs.hyros.com), per integration.
 // The real MCP rejects any other combination with the message mirrored below.
@@ -67,19 +98,27 @@ const lead = (i, joined, updated, stage = 'Lead') => ({
   phoneNumbers: [],
 });
 
+// Sales as GET /sales documents them: `creationDate` in the legacy
+// `EEE MMM dd HH:mm:ss zzz yyyy` format and a `price` object. `usdPrice` is
+// undocumented but the live MCP sends it; s1 keeps it so both paths are tested.
+const SALES = [
+  { id: 's1', lead: { email: 'lead1@example.test', firstName: 'Lead', lastName: '1' }, creationDate: '2026-09-05T12:00:00-05:00', usdPrice: { price: 149, currency: 'USD' }, price: { price: 149, currency: 'USD' }, product: { name: 'Bundle' }, firstSource: { name: 'Prospecting Broad' }, lastSource: { name: 'Prospecting Broad' } },
+  { id: 's2', lead: { email: 'lead2@example.test', firstName: 'Lead', lastName: '2' }, creationDate: 'Thu Jul 02 01:10:33 ART 2026', price: { price: 89, currency: 'EUR' }, product: { name: 'Starter' }, firstSource: { name: 'Powerset' }, lastSource: { name: 'Powerset' } },
+];
+
 const CLIENTS = [1, 2, 3, 4, 5, 6, 7].map((i) => ({ accountId: `c${i}`, email: `client${i}@example.test`, companyName: `Client ${i}`, firstName: 'C', lastName: String(i), status: i === 7 ? 'PENDING' : 'APPROVED' }));
 
 const TOOLS = {
   // `_key` / `_client` are the request context the mock server passes in.
   hyros_get_user_info: (args, { key, client }) => (client
-    ? { userProfile: { email: `client${client.slice(1)}@example.test`, timezone: '-05:00' }, trueTrackingData: {}, allowedAccounts: [], accessibleAccounts: [] }
+    ? { userProfile: { email: `client${client.slice(1)}@example.test`, timezone: mock.timezone || '-05:00' }, trueTrackingData: {}, allowedAccounts: [], accessibleAccounts: [] }
     : {
-      userProfile: { email: key === 'agency-key' ? 'agency@example.test' : 'mock@hyros.test', timezone: '-05:00' },
+      userProfile: { email: key === 'agency-key' ? 'agency@example.test' : 'mock@hyros.test', timezone: mock.timezone || '-05:00' },
       trueTrackingData: { OUTBOUND_CURRENCY: 'USD', LEAD_ATTRIBUTION_TIMEFRAME: '7' },
       allowedAccounts: key === 'agency-key' ? [] : [{ accountId: 'agency-9', email: 'agency@example.test', companyName: 'Agency', status: 'APPROVED' }],
       accessibleAccounts: key === 'agency-key' ? CLIENTS : [],
     }),
-  hyros_get_ad_accounts: () => ({ result: AD_ACCOUNTS, nextPageId: null }),
+  hyros_get_ad_accounts: () => ({ result: adAccounts(), nextPageId: null }),
   hyros_get_sources: () => ({
     result: [
       ...ADSETS.map((a) => ({
@@ -87,7 +126,7 @@ const TOOLS = {
         adSource: { adSourceId: a.id, adAccountId: '9001', platform: 'FACEBOOK' },
       })),
       // The real source list covers every connected platform, one per source link.
-      ...AD_ACCOUNTS.filter((acct) => acct.id !== '9001').map((acct) => ({
+      ...adAccounts().filter((acct) => acct.id !== '9001').map((acct) => ({
         name: `${acct.name} row`, tag: `@${acct.id}-1`, category: { name: 'Prospecting' }, trafficSource: { name: acct.type.toLowerCase() },
         adSource: { adSourceId: `${acct.id}-1`, adAccountId: acct.id, platform: acct.type },
       })),
@@ -95,7 +134,7 @@ const TOOLS = {
     nextPageId: null,
   }),
   hyros_get_attribution_report: ({ request }) => {
-    const acct = AD_ACCOUNTS.find((a) => a.id === String(request.ids[0]));
+    const acct = adAccounts().find((a) => a.id === String(request.ids[0]));
     if (!acct) return { result: [], nextPageId: null };
     const level = String(request.level || '').toLowerCase();
     if (!(LEVELS_FOR[acct.type] || []).includes(level)) {
@@ -113,15 +152,28 @@ const TOOLS = {
   hyros_get_stages: () => ({ result: [{ name: 'Lead', amount: 120 }, { name: 'Customer', amount: 40 }], nextPageId: null }),
   hyros_get_leads: ({ request }) => {
     if (request.updatedFromDate) {
-      // Incremental pull: one changed lead (stage moved) + one brand-new lead.
-      return { result: [lead(1, '2026-09-02T10:00:00-05:00', '2026-09-13T09:00:00-05:00', 'Customer'), lead(9, '2026-09-13T08:00:00-05:00', '2026-09-13T08:00:00-05:00')], nextPageId: null };
+      // Incremental pull: one changed lead (stage moved), one brand-new lead,
+      // and one that was merged into lead-1 (the API marks it with originLead).
+      return { result: [
+        lead(1, '2026-09-02T10:00:00-05:00', '2026-09-13T09:00:00-05:00', 'Customer'),
+        lead(9, '2026-09-13T08:00:00-05:00', '2026-09-13T08:00:00-05:00'),
+        { ...lead(2, '2026-09-02T10:00:00-05:00', '2026-09-13T09:30:00-05:00'), originLead: { id: 'lead-1', email: 'lead1@example.test', isOriginLead: true } },
+      ], nextPageId: null };
     }
     if (request.tags) return { result: [lead(1, '2026-09-02T10:00:00-05:00', '2026-09-02T10:00:00-05:00')], nextPageId: null };
     return { result: [1, 2, 3].map((i) => lead(i, `2026-09-0${i}T10:00:00-05:00`, `2026-09-0${i}T10:00:00-05:00`)), nextPageId: null };
   },
-  hyros_get_sales: () => ({ result: [{ id: 's1', lead: { email: 'lead1@example.test', firstName: 'Lead', lastName: '1' }, creationDate: '2026-09-05T12:00:00-05:00', usdPrice: { price: 149, currency: 'USD' }, product: { name: 'Bundle' }, firstSource: { name: 'Prospecting Broad' }, lastSource: { name: 'Prospecting Broad' } }], nextPageId: null }),
+  hyros_get_sales: () => ({ result: SALES, nextPageId: null }),
   hyros_get_calls: () => ({ result: [], nextPageId: null }),
   hyros_get_subscriptions: () => ({ result: [], nextPageId: null }),
+  hyros_get_lead_journey: ({ emails }) => (emails || []).map((email) => ({
+    lead: lead(1, '2026-09-02T10:00:00-05:00', '2026-09-02T10:00:00-05:00'),
+    sales: SALES.filter((s) => s.lead.email === email), calls: [], journey: [{ type: 'click', date: '2026-09-02T10:00:00-05:00', name: 'Prospecting Broad' }],
+  })),
+  hyros_get_lead_clicks: ({ request }) => {
+    if (request.email && !request.emails) throw new ToolError('email is deprecated: use emails');
+    return { result: [{ date: 'Thu Sep 02 10:00:00 EST 2026', page: 'https://mock.example.test/', sourceLinkName: 'Prospecting Broad', adspendType: 'FACEBOOK' }], nextPageId: null };
+  },
   hyros_get_marginal_cac_curve: ({ request }) => ({
     id: request.id, level: request.level, startDate: request.startDate, endDate: request.endDate,
     attributionModel: 'FIRST_CLICK', daysSampled: 42, cacCeiling: request.cacCeiling ?? 95, ceilingBasis: request.cacCeiling ? 'CALLER_PROVIDED' : 'REALIZED_LTV_90_DAYS',
@@ -132,6 +184,37 @@ const TOOLS = {
   hyros_assert_script_presence_on_domain: ({ domains }) => Object.fromEntries(domains.map((d, i) => [d, i ? 'SCRIPT_NOT_FOUND' : 'SCRIPT_FOUND'])),
   hyros_check_tracking_parameters_for_integrations: ({ request }) => ({ result: [{ adName: `${request.type} ad 1`, valid: true }, { adName: `${request.type} ad 2`, valid: false, missing: ['gclid'] }] }),
 };
+
+/**
+ * Pagination the way the documented list endpoints do it: `pageId` from the
+ * previous `nextPageId`, null on the last page, an error for a cursor the
+ * server no longer knows. Rows are the tool's first row cloned with unique ids.
+ */
+function paginate(name, args, body) {
+  const spec = mock.paged[name];
+  const pageId = args?.request?.pageId;
+  if (pageId && mock.expiredCursors.has(name)) throw new ToolError('pageId is invalid or has expired');
+  if (!spec || !Array.isArray(body?.result)) return body;
+  const page = pageId ? Number(String(pageId).split(':')[1]) : 0;
+  const base = body.result[0] || {};
+  const rows = Array.from({ length: spec.size }, (_, i) => {
+    const n = page * spec.size + i;
+    return { ...base, id: `${base.id || name}-${n}`, ...(base.email ? { email: `p${n}-${base.email}` } : {}) };
+  });
+  return { result: rows, nextPageId: page + 1 < spec.n ? `${name}:${page + 1}` : null };
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const latencyFor = (name) => (typeof mock.latencyMs === 'number' ? mock.latencyMs : (mock.latencyMs?.[name] || 0));
+
+/** An injected HTTP-level failure for this call, consumed from the queue. */
+function takeFailure(name) {
+  const i = mock.failures.findIndex((f) => !f.tool || f.tool === name);
+  if (i < 0) return null;
+  const f = mock.failures[i];
+  if (f.times <= 1) mock.failures.splice(i, 1); else f.times -= 1;
+  return f;
+}
 
 export function startMock(port = PORT) {
   const server = createServer(async (req, res) => {
@@ -147,10 +230,18 @@ export function startMock(port = PORT) {
       // The real MCP documents accessible_account_id "on other tools"; the mock honors the ARGUMENT form only.
       const client = args.accessible_account_id || null;
       calls.push({ name, args, apiKey: key, client, headerClient: req.headers['accessible-account-id'] || null });
+      const failure = takeFailure(name);
+      if (failure) {
+        const headers = { 'content-type': 'application/json', ...(failure.retryAfter != null ? { 'retry-after': String(failure.retryAfter) } : {}) };
+        res.writeHead(failure.status || 500, headers);
+        return res.end(typeof failure.body === 'string' ? failure.body : JSON.stringify(failure.body ?? { error: `injected HTTP ${failure.status}` }));
+      }
+      const latency = latencyFor(name);
+      if (latency) await sleep(latency);
       const fn = TOOLS[name];
       if (!fn) return reply({ isError: true, content: [{ type: 'text', text: `unknown tool ${name}` }] });
       try {
-        return reply({ content: [{ type: 'text', text: JSON.stringify(fn(args, { key, client })) }] });
+        return reply({ content: [{ type: 'text', text: JSON.stringify(paginate(name, args, fn(args, { key, client }))) }] });
       } catch (err) {
         if (err instanceof ToolError) return reply({ isError: true, content: [{ type: 'text', text: err.message }] });
         throw err;

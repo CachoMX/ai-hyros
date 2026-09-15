@@ -436,7 +436,9 @@ export async function buildSnapshot({
     const adRows = [];
     for (const acct of reportable) {
       const { adset, ad } = LEVELS_BY_TYPE[acct.type];
-      // Sequential per account: keeps us well inside the MCP's per-IP limiter.
+      // Sequential per account: the MCP limit is per HYROS account (30/s,
+      // 1000/min, shared by every key of the account and by an agency's
+      // clients), so parallel fan-out here only trades rows for 429s.
       adsetRows.push(...await fetchLevelSafe(acct, adset, range));
       if (ad) adRows.push(...await fetchLevelSafe(acct, ad, range));
     }

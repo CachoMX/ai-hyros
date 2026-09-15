@@ -6,13 +6,14 @@
  *     (updatedFromDate) and merges correctly
  *   - Scale Advisor curves and Tracking Health land in the snapshot
  */
-import { startMock, calls } from './mock-mcp.mjs';
+import { startMock, calls, mock } from './mock-mcp.mjs';
 
 const PORT = 4322;
 process.env.HYROS_MCP_URL = `http://127.0.0.1:${PORT}/mcp`;
 process.env.HYROS_API_KEY = 'mock';
 
 const { buildSnapshot } = await import('../api/_snapshot.js');
+const mcp = await import('../api/_mcp.js');
 
 let failures = 0;
 const check = (name, ok, extra = '') => {
@@ -22,6 +23,42 @@ const check = (name, ok, extra = '') => {
 
 const server = await startMock(PORT);
 try {
+  console.log('\nMCP transport: 429 + Retry-After, 403 vs 401, pagination info, expired cursor (api-docs.hyros.com)');
+  const LIMIT_MSG = 'You have reached the MCP request limit, please wait before sending again.';
+  mock.failNext({ tool: 'hyros_get_domains', status: 429, body: { error: LIMIT_MSG }, retryAfter: 1 });
+  const t0 = Date.now();
+  const domains = await mcp.callTool('hyros_get_domains', {}).catch((e) => e);
+  check('429 is retried after Retry-After and then succeeds', Array.isArray(domains) && domains.length === 2 && Date.now() - t0 >= 900, `${domains?.message || ''} ${Date.now() - t0}ms`);
+  mock.failNext({ tool: 'hyros_get_domains', status: 429, body: { error: LIMIT_MSG }, retryAfter: 0, times: 3 });
+  const limited = await mcp.callTool('hyros_get_domains', {}).catch((e) => e);
+  check('persistent 429 throws code rate_limited with the server text', limited?.code === 'rate_limited' && /request limit/.test(limited?.message || ''), `${limited?.code} ${limited?.message}`);
+  check('429 retried at most twice (3 attempts)', calls.filter((c) => c.name === 'hyros_get_domains').length === 5, String(calls.filter((c) => c.name === 'hyros_get_domains').length));
+  mock.failNext({ tool: 'hyros_get_domains', status: 403, body: { result: 'ERROR', message: 'Missing role GET_ATTRIBUTION' } });
+  const forbidden = await mcp.callTool('hyros_get_domains', {}).catch((e) => e);
+  check('403 surfaces as code forbidden with the server text, not auth', forbidden?.code === 'forbidden' && /Missing role/.test(forbidden?.message || ''), `${forbidden?.code} ${forbidden?.message}`);
+  mock.failNext({ tool: 'hyros_get_domains', status: 401, body: { error: 'invalid api key' } });
+  const unauth = await mcp.callTool('hyros_get_domains', {}).catch((e) => e);
+  check('401 stays code auth and keeps the server text', unauth?.code === 'auth' && /invalid api key/.test(unauth?.message || ''), `${unauth?.code} ${unauth?.message}`);
+  mock.failNext({ tool: 'hyros_get_domains', status: 500, body: 'gateway exploded' });
+  const boom = await mcp.callTool('hyros_get_domains', {}).catch((e) => e);
+  check('non-JSON error body keeps the HTTP status + text', /HTTP 500/.test(boom?.message || '') && /gateway exploded/.test(boom?.detail || boom?.message || ''), `${boom?.message}`);
+
+  mock.pages('hyros_get_sales', 6, 250);
+  const capped = await mcp.callToolPagedInfo('hyros_get_sales', { request: {} }, { maxPages: 4, pageSize: 250 });
+  check('callToolPagedInfo: cap reached with more pages -> truncated', capped.rows.length === 1000 && capped.truncated === true && capped.pages === 4, JSON.stringify({ n: capped.rows.length, t: capped.truncated, p: capped.pages }));
+  const whole = await mcp.callToolPagedInfo('hyros_get_sales', { request: {} }, { maxPages: 10, pageSize: 250 });
+  check('callToolPagedInfo: exhausted list -> not truncated', whole.rows.length === 1500 && whole.truncated === false && whole.pages === 6, JSON.stringify({ n: whole.rows.length, t: whole.truncated, p: whole.pages }));
+  check('callToolPagedInfo: rows have unique ids across pages', new Set(whole.rows.map((r) => r.id)).size === 1500);
+  const legacyRows = await mcp.callToolPaged('hyros_get_sales', { request: {} }, { maxPages: 2, pageSize: 250 });
+  check('callToolPaged is still a plain array (thin wrapper)', Array.isArray(legacyRows) && legacyRows.length === 500);
+  const nearDeadline = await mcp.callToolPagedInfo('hyros_get_sales', { request: {} }, { maxPages: 10, pageSize: 250, deadline: Date.now() + 1 });
+  check('callToolPagedInfo: stops paging at the deadline, flagged', nearDeadline.pages >= 1 && nearDeadline.truncated === true && nearDeadline.error === 'time budget', JSON.stringify({ p: nearDeadline.pages, e: nearDeadline.error }));
+  mock.expireCursorOn('hyros_get_sales');
+  const partial = await mcp.callToolPagedInfo('hyros_get_sales', { request: {} }, { maxPages: 4, pageSize: 250 });
+  check('expired cursor on page 2 -> rows so far + truncated + error, no throw', partial.rows.length === 250 && partial.truncated === true && /expired/.test(partial.error || ''), JSON.stringify({ n: partial.rows.length, e: partial.error }));
+  mock.reset();
+  calls.length = 0;
+
   console.log('\nFull build with settings');
   const prefs = { settings: { model: 'LAST_CLICK', windowDays: 14, leadStage: ['Customer'] } };
   const snap = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
@@ -69,7 +106,7 @@ try {
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });
   const leadsReq = calls.find((c) => c.name === 'hyros_get_leads')?.args.request;
   check('leads pulled with updatedFromDate', Boolean(leadsReq?.updatedFromDate) && !leadsReq?.fromDate, JSON.stringify(leadsReq));
-  check('sync flagged incremental', snap2.crm.sync.incremental === true && snap2.crm.sync.leadsFetched === 2);
+  check('sync flagged incremental', snap2.crm.sync.incremental === true && snap2.crm.sync.leadsFetched === 3);
   check('merged: previous leads kept', snap2.crm.leads.some((l) => l.id === 'lead-2') && snap2.crm.leads.some((l) => l.id === 'lead-3'));
   check('merged: changed lead updated in place', snap2.crm.leads.find((l) => l.id === 'lead-1')?.stage === 'Customer');
   check('merged: new lead added', snap2.crm.leads.some((l) => l.id === 'lead-9'));
@@ -139,6 +176,23 @@ try {
 
   const sync = await acc.syncClients(added.account.id);
   check('client sync is idempotent', sync.added === 0 && sync.total === 7);
+
+  // A client 403 (missing role / not authorized) is a refresh failure, NOT an invalid agency key.
+  const fakeRes = () => { const r = { status(c) { r.code = c; return r; }, json(b) { r.body = b; return r; }, setHeader() {} }; return r; };
+  process.env.CRON_SECRET = 'cron-s';
+  const refresh = (await import('../api/refresh.js')).default;
+  mock.failNext({ status: 403, body: { result: 'ERROR', message: 'Not authorized: account c1 is not one of your connected client accounts.' } });
+  let rr = fakeRes();
+  await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
+  check('refresh answers 502 forbidden on a client 403', rr.code === 502 && rr.body?.error === 'forbidden', JSON.stringify(rr.body));
+  const after403 = await acc.listAccounts();
+  check('agency key NOT marked invalid by a client 403; lastError recorded', after403.find((a) => a.id === added.account.id).keyStatus === 'ok' && /Not authorized/.test(after403.find((a) => a.id === cli.id).lastError || ''), JSON.stringify(after403.map((a) => [a.id, a.keyStatus, a.lastError])));
+  mock.failNext({ status: 401, body: { error: 'invalid api key' } });
+  rr = fakeRes();
+  await refresh({ url: `/api/refresh?account=${cli.id}`, headers: { host: 'x', authorization: 'Bearer cron-s' } }, rr);
+  check('a 401 on refresh DOES mark the agency key invalid', rr.body?.error === 'auth' && (await acc.listAccounts()).find((a) => a.id === added.account.id).keyStatus === 'invalid', JSON.stringify(rr.body));
+  await acc.markKeyStatus(cli.id, 'ok');
+  delete process.env.CRON_SECRET;
 
   // Key goes bad: mark invalid, clients inherit, resolve refuses with a clear code.
   await acc.markKeyStatus(cli.id, 'invalid', 'MCP rejected the API key (HTTP 401)');
