@@ -1,0 +1,6 @@
+# Nothing here is needed at runtime — keep the deployment bundle to the app.
+# Do NOT add data/ : api/data.js reads data/seed.json as its fallback snapshot.
+scripts/
+README.md
+FINDINGS.md
+.env.example

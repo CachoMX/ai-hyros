@@ -1,0 +1,13 @@
+{
+  "id": "funnel",
+  "name": "Funnel & Journey",
+  "tab": "Funnel & Journey",
+  "version": "1.0.0",
+  "description": "Stage-by-stage funnel (clicks → carts → leads → customers), where customers enter and convert by campaign, and the most common tracked paths.",
+  "mode": "demo",
+  "demo": true,
+  "server": false,
+  "style": true,
+  "needs": ["ranges.30d"],
+  "author": "HYROS"
+}

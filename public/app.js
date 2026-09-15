@@ -1,0 +1,1989 @@
+import {
+  CATALOG, CATALOG_BY_KEY, DEFAULT_KEYS, formatCell, fmt, aggregate, rollup,
+} from './shared/metrics.js';
+import {
+  buildDemoSnapshot, applyAttribution, demoCohort, demoRecords, demoJourney,
+} from './demo.js';
+import { loadFeatures, applyDemoFeatures, needsMet } from './shared/features.js';
+
+/* Level model mirrors HYROS's own naming for Meta (SourceNamingUtils.ts):
+   SOURCE_CATEGORY renders as "Campaign", SOURCE_LINK as "Ad Set". */
+const LEVELS = [
+  { key: 'traffic',  label: 'Traffic source' },
+  { key: 'account',  label: 'Account' },
+  { key: 'campaign', label: 'Campaign' },
+  { key: 'adset',    label: 'Ad Set' },
+  { key: 'ad',       label: 'Ad' },
+];
+const LEVEL_LABEL = Object.fromEntries(LEVELS.map((l) => [l.key, l.label]));
+
+/* Clicking a row NAME descends the hierarchy (HYROS-style drilldown). */
+const CHILD_LEVEL = { traffic: 'campaign', account: 'campaign', campaign: 'adset', adset: 'ad' };
+
+/* HYROS-attributed columns wear the lavender band (the site's HYROS-column signature). Cosmetic only. */
+const HY = new Set(['revenue', 'roas']);
+const KPI_HY = 'revenue';
+
+const KPIS = [
+  { key: 'cost',    label: 'Cost',    type: 'money' },
+  { key: 'revenue', label: 'Revenue', type: 'money' },
+  { key: 'profit',  label: 'Profit',  type: 'money', tone: true },
+  { key: 'roas',    label: 'ROAS',    type: 'ratio' },
+  { key: 'sales',   label: 'Sales',   type: 'int' },
+  { key: 'leads',   label: 'Leads',   type: 'int' },
+  { key: 'calls',   label: 'Calls',   type: 'int' },
+  { key: 'clicks',  label: 'Clicks',  type: 'int' },
+];
+
+/* Which drawer a drilled cell opens. */
+const DRILL_METRIC = {
+  leads: 'leads', newLeads: 'leads',
+  sales: 'sales', uniqueSales: 'sales',
+  calls: 'calls', qualifiedCalls: 'calls',
+};
+
+const state = {
+  key: sessionStorage.getItem('aihyros_key') || '',
+  snapshot: null,
+  origin: 'seed',
+  capabilities: {},
+  serverPrefs: null,
+  range: '7d',
+  level: 'campaign',
+  path: [],                       // hierarchy crumbs: {level, id, name}
+  sort: { col: 'cost', dir: 'desc' },
+  search: '',
+  hideZero: false,
+  cols: [...DEFAULT_KEYS],
+  crm: { tab: 'leads', stage: '', attr: '', search: '', sort: { col: 'joined', dir: 'desc' } },
+  demo: false,                    // demo mode: synthetic snapshot, demo-served drills
+  demoModel: 'last',              // demo attribution model: 'last' | 'custom'
+  account: localStorage.getItem('aihyros_account') || null,    // selected account id (null = server default)
+  accounts: [],                   // from /api/accounts (ids + labels, never keys)
+  setup: null,                    // /api/setup state: needs_storage | needs_setup | ready
+  features: [],                   // loaded feature modules (public/features/<id>/), see FEATURES.md
+};
+
+const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs']);
+
+/* Demo mode caches: the real snapshot to restore, and both attribution views. */
+let realCache = null;
+let demoSnaps = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* Column order IS state.cols order (drag & drop reorders it). */
+function activeCols() {
+  return state.cols.map((k) => CATALOG_BY_KEY.get(k)).filter(Boolean);
+}
+
+function resolveCols() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('aihyros_cols'));
+    if (Array.isArray(stored) && stored.length) {
+      state.cols = stored.filter((k) => CATALOG_BY_KEY.has(k));
+      return;
+    }
+  } catch { /* fall through */ }
+  const server = state.serverPrefs?.cols;
+  state.cols = Array.isArray(server) && server.length
+    ? server.filter((k) => CATALOG_BY_KEY.has(k))
+    : [...DEFAULT_KEYS];
+}
+
+function persistColsLocal() {
+  localStorage.setItem('aihyros_cols', JSON.stringify(state.cols));
+}
+
+/* ------------------------------------------------------------------ *
+ * Data access
+ * ------------------------------------------------------------------ */
+
+async function api(path, opts = {}) {
+  const url = new URL(path, location.origin);
+  if (state.key) url.searchParams.set('key', state.key);
+  if (ACCOUNT_SCOPED.has(url.pathname) && state.account) {
+    url.searchParams.set('account', state.account);
+  }
+  const res = await fetch(url, opts);
+  if (res.status === 401) throw new Error('unauthorized');
+  return { status: res.status, body: await res.json() };
+}
+
+/** Placeholder snapshot for an account that has no build yet. */
+function emptySnapshot() {
+  const a = state.accounts.find((x) => x.id === state.account);
+  return {
+    schema: 2, generatedAt: null, origin: 'none', attributionModel: '—',
+    settings: { model: 'LAST_CLICK', windowDays: 0, leadStage: [] },
+    account: { email: a?.label || a?.email || 'New account' },
+    adAccounts: [], sourceCount: 0, ranges: {}, crm: { leads: [], sales: [], calls: [], subscriptions: [], stages: [], totals: {} },
+  };
+}
+
+async function load() {
+  const { body } = await api('/api/data');
+  state.origin = body.origin;
+  state.capabilities = body.capabilities || {};
+  state.serverPrefs = body.prefs || null;
+  if (body.account && !state.account) state.account = body.account;
+  state.snapshot = body.snapshot || emptySnapshot();
+  if (state.snapshot.ranges?.[state.range]?.unavailable) {
+    const live = Object.keys(state.snapshot.ranges)
+      .find((k) => !state.snapshot.ranges[k].unavailable);
+    if (live) state.range = live;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Gate
+ * ------------------------------------------------------------------ */
+
+$('gateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  state.key = $('gateKey').value.trim();
+  try {
+    await load();
+    sessionStorage.setItem('aihyros_key', state.key);
+    afterSignIn();
+  } catch {
+    $('gateErr').hidden = false;
+    $('gateErr').textContent = 'Incorrect password.';
+  }
+});
+$('gateDemo').addEventListener('click', () => startDemoOnly());
+
+/**
+ * Boot: ask the (unauthenticated) setup route what this deployment still
+ * needs, then route to the storage gate, the first-run password screen, the
+ * sign-in gate, or straight into the dashboard.
+ */
+async function boot() {
+  try {
+    const res = await fetch(`${location.origin}/api/setup`);
+    state.setup = await res.json();
+  } catch { state.setup = null; }
+  const st = state.setup?.state;
+  if (st === 'needs_storage') { startDemoOnly({ overlay: 'storage' }); return; }
+  if (st === 'needs_setup') { showSetup('connect'); return; }
+  try {
+    await load();
+    afterSignIn();
+  } catch {
+    $('gate').hidden = false;
+  }
+}
+
+/** Signed in: the dashboard (Demo account if nothing is connected yet). */
+function afterSignIn() {
+  start();
+}
+
+async function start() {
+  $('gate').hidden = true;
+  $('setup').hidden = true;
+  $('app').hidden = false;
+  resolveCols();
+  await mountFeatures();
+  await loadAccounts();
+  const hasAccounts = state.accounts.length > 0;
+  if (!hasAccounts || sessionStorage.getItem('aihyros_demo') === '1') {
+    setDemo(true, { silent: true });
+    if (!hasAccounts && state.setup?.state !== 'needs_storage') {
+      note('<b>Demo account.</b> No HYROS account is connected yet — open the account menu (top left) and add your API key to see your own data.');
+    }
+  } else {
+    if (state.demo) {
+      // Leaving the Demo account for a freshly loaded real one: the loaded
+      // snapshot is what must survive, not the pre-demo cache.
+      realCache = { snapshot: state.snapshot, origin: state.origin };
+      setDemo(false, { silent: true });
+    }
+    renderChrome();
+    renderRangeChips();
+    renderLevelChips();
+    renderReport();
+    renderCrm();
+    if (state.origin === 'none') firstBuild();
+  }
+  renderSetupBanner();
+  initHProxy();
+}
+
+/**
+ * Demo-only: the dashboard with just the Demo account (no storage yet, or
+ * the visitor chose the demo from the gate). Nothing here calls the API.
+ */
+function startDemoOnly({ overlay = null } = {}) {
+  $('gate').hidden = true;
+  $('app').hidden = false;
+  state.accounts = [];
+  state.accountsMeta = { canAdd: false, message: overlay === 'storage' ? 'Set up storage first (see the banner).' : 'Sign in to add accounts.' };
+  resolveCols();
+  mountFeatures().then(() => { setDemo(true, { silent: true }); renderAcctPanel(); renderSetupBanner(); initHProxy(); if (overlay) showSetup(overlay, { overlay: true }); });
+}
+
+/* ------------------------------------------------------------------ *
+ * First-run setup + Setup & security
+ * ------------------------------------------------------------------ */
+
+const SETUP_STEPS = ['storage', 'connect', 'harden'];
+
+function showSetup(step, { overlay = false } = {}) {
+  const box = $('setup');
+  box.hidden = false;
+  box.classList.toggle('is-overlay', overlay);
+  ['setupStorage', 'setupConnect', 'setupAccount', 'setupHarden', 'setupSecurity'].forEach((id) => { $(id).hidden = true; });
+  $(`setup${step[0].toUpperCase()}${step.slice(1)}`).hidden = false;
+  $('setupSteps').hidden = step === 'security' || step === 'account';
+  const idx = SETUP_STEPS.indexOf(step);
+  $('setupSteps').querySelectorAll('li').forEach((li) => {
+    const i = SETUP_STEPS.indexOf(li.dataset.step);
+    li.className = i < idx ? 'done' : i === idx ? 'now' : '';
+  });
+  if (step === 'harden') loadSecrets();
+  if (step === 'security') renderSecurity();
+  const focus = { connect: 'setupKey', account: 'setupKey2' }[step];
+  if (focus) setTimeout(() => $(focus).focus(), 50);
+}
+
+function hideSetup() { $('setup').hidden = true; $('setup').classList.remove('is-overlay'); }
+
+async function refreshSetupState() {
+  try { const res = await fetch(`${location.origin}/api/setup`); state.setup = await res.json(); } catch { /* keep the old state */ }
+  return state.setup;
+}
+
+function renderSetupBanner() {
+  const b = $('setupBanner');
+  const st = state.setup?.state;
+  if (st === 'needs_storage') {
+    b.hidden = false;
+    b.innerHTML = '<b>Storage is not set up</b> — this is the Demo account only. Your own data needs the free Upstash Redis store. <button type="button" id="bannerSetup">Show me how</button>';
+    $('bannerSetup').addEventListener('click', () => showSetup('storage', { overlay: true }));
+  } else if (state.key && state.accounts.length === 0 && st !== undefined) {
+    b.hidden = false;
+    b.innerHTML = '<b>Demo account only</b> — connect your HYROS API key to see your own data. <button type="button" id="bannerKey">Connect HYROS</button>';
+    $('bannerKey').addEventListener('click', () => showSetup('account'));
+  } else {
+    b.hidden = true;
+    b.innerHTML = '';
+  }
+}
+
+// Storage gate
+$('setupCheck').addEventListener('click', async () => {
+  const btn = $('setupCheck');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  const st = await refreshSetupState();
+  btn.disabled = false; btn.textContent = 'Check again';
+  if (st?.state === 'needs_storage') {
+    $('setupStorageErr').hidden = false;
+    $('setupStorageErr').textContent = 'Still no storage variables on this deployment. Did you redeploy after connecting the database?';
+    return;
+  }
+  location.reload();
+});
+$('setupDemo').addEventListener('click', () => hideSetup());
+
+// First run: HYROS key + dashboard password in one step (the key is optional)
+async function runFirstSetup({ apiKey, agency, password }) {
+  const res = await fetch(`${location.origin}/api/setup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'setup', password, apiKey, agency }) });
+  const body = await res.json();
+  if (!body.ok) throw new Error(body.message || body.error);
+  state.key = password;
+  sessionStorage.setItem('aihyros_key', password);
+  sessionStorage.setItem('aihyros_demo', '');
+  state.setup = { ...(state.setup || {}), ...body };
+  if (body.account) { state.account = body.account.id; localStorage.setItem('aihyros_account', state.account); }
+  await load().catch(() => {});
+  await start();
+  if (body.account && body.clientsFound > 0 && body.clientsApproved > 0) await importAgencyClients(body.account.id, body.account.label);
+  if (state.setup?.pendingSecrets) showSetup('harden', { overlay: true });
+}
+
+$('setupConnectForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const apiKey = $('setupKey').value.trim();
+  const p1 = $('setupPw1').value; const p2 = $('setupPw2').value;
+  const err = $('setupConnectErr'); const btn = $('setupConnectBtn');
+  err.hidden = true;
+  if (!apiKey) { err.hidden = false; err.textContent = 'Paste your HYROS API key, or use the link below to set only the password.'; return; }
+  if (p1.length < 8) { err.hidden = false; err.textContent = 'Use at least 8 characters for the password.'; return; }
+  if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
+  btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
+  try { await runFirstSetup({ apiKey, agency: $('setupAgency').checked, password: p1 }); $('setupKey').value = ''; }
+  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
+});
+$('setupSkipKey').addEventListener('click', async () => {
+  const p1 = $('setupPw1').value; const p2 = $('setupPw2').value;
+  const err = $('setupConnectErr');
+  err.hidden = true;
+  if (p1.length < 8) { err.hidden = false; err.textContent = 'Choose the dashboard password first (8+ characters).'; return; }
+  if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
+  try { await runFirstSetup({ apiKey: '', agency: false, password: p1 }); }
+  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+});
+
+// Connect a key later (banner / account menu), once signed in
+$('setupKeyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const apiKey = $('setupKey2').value.trim();
+  const btn = $('setupConnect2'); const err = $('setupKeyErr');
+  err.hidden = true;
+  btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
+  try {
+    const { body } = await api('/api/accounts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey, agency: $('setupAgency2').checked }) });
+    if (!body.ok) { err.hidden = false; err.textContent = body.message || body.error; return; }
+    $('setupKey2').value = '';
+    sessionStorage.setItem('aihyros_demo', '');
+    state.account = body.account.id;
+    localStorage.setItem('aihyros_account', state.account);
+    await refreshSetupState();
+    await load().catch(() => {});
+    await start();
+    if (body.clientsFound > 0 && body.clientsApproved > 0) await importAgencyClients(body.account.id, body.account.label);
+    if (state.setup?.pendingSecrets) showSetup('harden', { overlay: true });
+  } catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
+});
+$('setupSkipKey2').addEventListener('click', () => hideSetup());
+
+// Hardening
+async function loadSecrets() {
+  $('secretKey').textContent = '…'; $('secretCron').textContent = '…';
+  try {
+    const { body } = await api('/api/setup?secrets=1');
+    const sec = body.secrets || {};
+    $('secretKey').textContent = sec.ACCOUNT_KEY_SECRET || (state.setup?.keySecret === 'env' ? 'already set in Vercel' : '—');
+    $('secretCron').textContent = sec.CRON_SECRET || (state.setup?.cronSecret === 'env' ? 'already set in Vercel' : '—');
+    $('setupHardenStatus').textContent = (!sec.ACCOUNT_KEY_SECRET && !sec.CRON_SECRET) ? 'Both secrets already live in Vercel — nothing left to do.' : '';
+  } catch (err) { $('setupHardenStatus').textContent = `Could not load the secrets: ${err.message}`; }
+}
+document.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+  const text = $(b.dataset.copy).textContent;
+  try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select & copy'; }
+  setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+}));
+$('setupHardenBtn').addEventListener('click', async () => {
+  const st = $('setupHardenStatus');
+  st.textContent = 'Checking Vercel…';
+  try {
+    const { body } = await api('/api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'harden' }) });
+    if (!body.ok) { st.textContent = body.message || body.error; return; }
+    const left = Object.entries(body.remaining).filter(([, v]) => v).map(([k]) => k);
+    if (!left.length) { st.textContent = 'Hardened — the generated copies were removed from the database.'; await refreshSetupState(); setTimeout(() => { hideSetup(); if ($('app').hidden) start(); }, 900); }
+    else st.textContent = `${left.join(' and ')} in Vercel ${left.length === 1 ? 'does' : 'do'} not match yet — did you redeploy after adding ${left.length === 1 ? 'it' : 'them'}? (Only matching values are removed, so nothing can be locked out.)`;
+  } catch (err) { st.textContent = err.message; }
+});
+$('setupHardenLater').addEventListener('click', () => { hideSetup(); if ($('app').hidden) start(); });
+
+// Setup & security (from the account menu)
+function renderSecurity() {
+  const st = state.setup || {};
+  const facts = [
+    ['Storage', st.storage ? `connected (${st.storeVia})` : 'not set up'],
+    ['Password', st.passwordSource === 'kv' ? `set on this dashboard${st.masterPassword ? ' (+ REPORT_PASSWORD master password in Vercel)' : ''}` : 'none'],
+    ['Key encryption secret', st.keySecret === 'env' ? 'ACCOUNT_KEY_SECRET in Vercel' : st.keySecret === 'kv' ? 'generated, stored in the database' : 'none'],
+    ['Daily refresh', st.cronSecret === 'env' ? 'signed (CRON_SECRET in Vercel)' : 'unsigned — once per hour at most; set CRON_SECRET to sign it'],
+    ['HYROS MCP', st.mcpUrl || '—'],
+    ['Accounts', String(st.accounts ?? state.accounts.length)],
+  ];
+  $('setupFacts').innerHTML = facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+  $('setupChangePw').hidden = st.passwordSource !== 'kv';
+  $('secHardenBlock').hidden = !st.pendingSecrets;
+  $('changePwStatus').textContent = ''; $('resetStatus').textContent = ''; $('resetConfirm').value = ''; $('resetBtn').disabled = true;
+}
+$('acctSetupBtn').addEventListener('click', async () => { $('acctPanel').hidden = true; await refreshSetupState(); showSetup('security'); });
+$('setupClose').addEventListener('click', hideSetup);
+$('secHardenOpen').addEventListener('click', () => showSetup('harden'));
+$('setupChangePw').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const p1 = $('changePw1').value; const p2 = $('changePw2').value; const st = $('changePwStatus');
+  if (p1 !== p2) { st.textContent = 'The two passwords differ.'; return; }
+  try {
+    const { body } = await api('/api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'change-password', password: p1 }) });
+    if (!body.ok) { st.textContent = body.message || body.error; return; }
+    state.key = p1; sessionStorage.setItem('aihyros_key', p1);
+    $('changePw1').value = ''; $('changePw2').value = '';
+    st.textContent = 'Password changed. Anyone else signed in will need the new one.';
+  } catch (err) { st.textContent = err.message; }
+});
+$('resetConfirm').addEventListener('input', () => { $('resetBtn').disabled = $('resetConfirm').value.trim() !== 'RESET'; });
+$('resetBtn').addEventListener('click', async () => {
+  const st = $('resetStatus');
+  if (!window.confirm('Delete every account, snapshot, setting and the password from this dashboard? This cannot be undone.')) return;
+  st.textContent = 'Resetting…';
+  try {
+    const { body } = await api('/api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'reset', confirm: 'RESET' }) });
+    if (!body.ok) { st.textContent = body.message || body.error; return; }
+    sessionStorage.clear(); localStorage.removeItem('aihyros_account');
+    st.textContent = `Reset — ${body.deleted} stored items deleted. Reloading…`;
+    setTimeout(() => location.reload(), 900);
+  } catch (err) { st.textContent = err.message; }
+});
+
+/* ------------------------------------------------------------------ *
+ * Chrome
+ * ------------------------------------------------------------------ */
+
+function renderChrome() {
+  const s = state.snapshot;
+  const gen = new Date(s.generatedAt);
+  const attr = String(s.attributionModel || '—')
+    .replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+    .replace(/\bhyros\b/i, 'HYROS');
+  const upd = Number.isNaN(gen.getTime()) ? '—' : gen.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  // Header: the account SELECTOR carries the account; ad accounts / source
+  // count / model live in Tracking Health and the report settings (and the
+  // selector's tooltip). Updated time sits by the badge.
+  const acct = state.accounts.find((a) => a.id === state.account);
+  $('acctLabel').textContent = state.demo ? 'Demo account'
+    : (acct?.label || s.account?.email || 'No account');
+  $('acctBtn').title = `${state.demo ? 'Synthetic demo data' : (s.adAccounts.map((a) => a.name).join(', ') || 'no ad accounts')} · ${s.sourceCount} sources · ${attr}`;
+  $('meta').innerHTML = '';
+  $('updated').textContent = s.generatedAt ? `Updated ${upd}` : 'Not built yet';
+
+  const badge = $('originBadge');
+  if (state.demo) {
+    badge.textContent = 'Demo';
+    badge.className = 'badge demo';
+    badge.title = 'Demo mode — every number is synthetic. Click to return to your data.';
+  } else if (state.origin === 'none') {
+    badge.textContent = 'New';
+    badge.className = 'badge none';
+    badge.title = 'No snapshot yet for this account — building the first one. Click for demo mode.';
+  } else {
+    const live = state.origin === 'kv';
+    badge.textContent = live ? 'Live' : 'Seed';
+    badge.className = `badge ${live ? 'live' : 'seed'}`;
+    badge.title = (live
+      ? 'Snapshot built from the HYROS MCP and stored in your database.'
+      : 'Preview snapshot.')
+      + ' Click to switch to demo mode.';
+  }
+
+  // Demo-only chrome: attribution selector; Refresh pauses. Feature tabs follow their manifests.
+  $('attrWrap').hidden = !state.demo;
+  $('refreshBtn').disabled = state.demo;
+  $('refreshBtn').title = state.demo ? 'Refresh is paused while demo mode is on.' : '';
+
+  // Live-mode chrome: report settings (built into the next refresh) and the
+  // two analysis tabs, which appear once a snapshot carries their blocks.
+  $('setWrap').hidden = state.demo;
+  renderFeatureTabs();
+  renderSettingsSummary();
+}
+
+/* ---------- report settings (attribution model / window / stage ranking) ---------- */
+
+function currentSettings() {
+  return state.serverPrefs?.settings || state.snapshot?.settings
+    || { model: state.snapshot?.attributionModel || 'LAST_CLICK', windowDays: 0, leadStage: [] };
+}
+
+function renderSettingsSummary() {
+  const s = state.snapshot?.settings;
+  if (!s || state.demo) return;
+  const bits = [];
+  if (s.windowDays > 0) bits.push(`<span class="meta-pill" title="Attribution window">${s.windowDays}-day window</span>`);
+  if (s.leadStage?.length) bits.push(`<span class="meta-pill" title="Report ranked by funnel stage">stage: ${esc(s.leadStage.join(', '))}</span>`);
+  if (bits.length) $('meta').insertAdjacentHTML('beforeend', bits.join(''));
+}
+
+function renderSettingsPanel() {
+  const cur = currentSettings();
+  $('setModel').value = cur.model || 'LAST_CLICK';
+  $('setWindow').value = String(cur.windowDays || 0);
+  $('setWindow').disabled = $('setModel').value !== 'LAST_CLICK';
+  const stages = (state.snapshot?.crm?.stages || []).filter((st) => st.name && st.name.trim());
+  const picked = new Set(cur.leadStage || []);
+  $('setStages').innerHTML = stages.length
+    ? stages.map((st) => `<button type="button" class="chip ${picked.has(st.name) ? 'active' : ''}" data-stage="${esc(st.name)}">${esc(st.name)}</button>`).join('')
+    : '<div class="empty">No stages in this snapshot yet.</div>';
+  $('setStages').querySelectorAll('.chip').forEach((b) =>
+    b.addEventListener('click', () => b.classList.toggle('active')));
+  $('setStatus').textContent = 'Applies on the next Refresh.';
+}
+
+function readSettingsPanel() {
+  return {
+    model: $('setModel').value,
+    windowDays: Math.max(0, Math.min(365, Number($('setWindow').value) || 0)),
+    leadStage: [...$('setStages').querySelectorAll('.chip.active')].map((b) => b.dataset.stage),
+  };
+}
+
+$('setBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = $('setPanel');
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) renderSettingsPanel();
+});
+$('setPanel').addEventListener('click', (e) => e.stopPropagation());
+$('setModel').addEventListener('change', () => { $('setWindow').disabled = $('setModel').value !== 'LAST_CLICK'; });
+document.addEventListener('click', () => { $('setPanel').hidden = true; });
+
+$('setSaveBtn').addEventListener('click', async () => {
+  const btn = $('setSaveBtn');
+  const settings = readSettingsPanel();
+  btn.disabled = true;
+  $('setStatus').textContent = 'Saving…';
+  try {
+    const { body } = await api('/api/prefs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    });
+    if (!body.persisted) {
+      $('setStatus').textContent = body.message || 'Not saved — KV is not configured.';
+      return;
+    }
+    state.serverPrefs = { ...(state.serverPrefs || {}), settings };
+    $('setStatus').textContent = 'Saved — rebuilding…';
+    $('setPanel').hidden = true;
+    $('refreshBtn').click();
+  } catch (err) {
+    $('setStatus').textContent = `Save failed: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- account selector ---------- */
+
+async function loadAccounts() {
+  try {
+    const { body } = await api('/api/accounts');
+    state.accounts = body.accounts || [];
+    state.accountsMeta = { canAdd: Boolean(body.canAdd), message: body.message || '' };
+    if (!state.accounts.some((a) => a.id === state.account)) {
+      state.account = body.defaultId || state.accounts[0]?.id || null;
+      if (state.account) localStorage.setItem('aihyros_account', state.account); else localStorage.removeItem('aihyros_account');
+    }
+  } catch { state.accounts = []; state.accountsMeta = { canAdd: false, message: '' }; }
+}
+
+/** Why an account can't be opened right now (null = fine). */
+function acctBlock(a) {
+  // Approval state first (it is what the user must fix in HYROS), then key health.
+  if (a.kind === 'client' && a.status === 'PENDING') return { text: 'pending approval', why: 'HYROS has not approved the agency\u2019s access to this client yet.' };
+  if (a.kind === 'client' && a.status === 'REVOKED') return { text: 'access revoked', why: 'This client no longer appears in the agency\u2019s accessible accounts.' };
+  if (a.kind === 'client' && a.status !== 'APPROVED') return { text: String(a.status || '').toLowerCase(), why: 'Not approved.' };
+  if (a.keyStatus === 'invalid') return { text: 'key invalid', why: a.keyError || 'HYROS rejected this key.', fix: a.kind === 'client' ? null : a.id };
+  return null;
+}
+
+function acctRowHtml(a, parent) {
+  const block = acctBlock(a);
+  const unsupported = a.kind === 'client' && parent?.clientModeStatus === 'unsupported';
+  const disabled = Boolean(block) || unsupported;
+  const sub = a.primary ? 'primary · from environment'
+    : a.kind === 'client' ? `via ${esc(parent?.label || 'agency')}`
+    : a.agency ? `agency${a.clientsSyncedAt ? ` · clients synced ${esc(fmt.date(a.clientsSyncedAt))}` : ''}`
+    : esc(a.company || a.email || '');
+  const when = a.lastRefresh ? ` · updated ${esc(fmt.date(a.lastRefresh))}` : (disabled ? '' : ' · not built yet');
+  const pills = [
+    a.primary ? '<span class="pill">primary</span>' : '',
+    a.agency ? '<span class="pill">agency</span>' : '',
+    block ? `<span class="pill warnk" title="${esc(block.why)}">${esc(block.text)}</span>` : '',
+    unsupported ? '<span class="pill warnk" title="The HYROS MCP does not honor accessible_account_id yet — clients cannot be read through the agency key. Listed so they light up the moment the API supports it.">MCP: no client access yet</span>' : '',
+    a.lastError && !block ? `<span class="pill warnk" title="${esc(a.lastError)}">last refresh failed</span>` : '',
+    block?.fix ? `<button type="button" class="acct-fix" data-fix="${esc(block.fix)}">Replace key</button>` : '',
+  ].join('');
+  return `<button type="button" class="acct-row ${a.kind === 'client' ? 'client' : ''} ${!state.demo && a.id === state.account ? 'active' : ''} ${disabled ? 'disabled' : ''}"
+      data-id="${esc(a.id)}" ${disabled ? `data-blocked="${esc(block?.why || 'unsupported')}"` : ''} title="${esc(block?.why || '')}">
+    <span><b>${esc(a.label || a.email || a.id)}</b><span class="sub">${sub}${when}</span></span>
+    <span class="pills">${pills}</span>
+    ${a.primary ? '<span></span>' : `<span class="acct-x" data-remove="${esc(a.id)}" title="Remove ${a.agency ? 'this agency and its clients' : 'this account'}">✕</span>`}
+  </button>`;
+}
+
+function renderAcctPanel() {
+  const accounts = state.accounts;
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const tops = accounts.filter((a) => a.kind !== 'client');
+  const rows = tops.map((a) => acctRowHtml(a) + accounts.filter((c) => c.kind === 'client' && c.parentId === a.id)
+    .map((c) => acctRowHtml(c, byId.get(c.parentId))).join('')).join('');
+
+  const last = accounts.map((a) => a.lastRefresh).filter(Boolean).sort().pop();
+  const built = accounts.filter((a) => a.lastRefresh).length;
+  $('acctHead').innerHTML = last
+    ? `Last refresh <b>${esc(fmt.datetime(last))}</b> · ${built}/${accounts.length} built · daily auto-refresh`
+    : (accounts.length ? 'No refresh yet · daily auto-refresh' : 'Accounts');
+
+  $('acctList').innerHTML = `${rows || '<div class="empty" style="padding:10px">No accounts connected yet.</div>'}
+    <button type="button" class="acct-row ${state.demo ? 'active' : ''}" data-id="demo">
+      <span><b>Demo account</b><span class="sub">synthetic, profitable-looking data for demos</span></span>
+      <span class="pills"><span class="pill demo">demo</span></span><span></span>
+    </button>`;
+
+  $('acctList').querySelectorAll('.acct-row').forEach((row) => {
+    row.addEventListener('click', (e) => {
+      if (e.target.dataset.remove) { e.stopPropagation(); removeAccount(e.target.dataset.remove); return; }
+      if (e.target.dataset.fix) { e.stopPropagation(); openReplaceKey(e.target.dataset.fix); return; }
+      if (row.dataset.blocked) { e.stopPropagation(); return; }
+      $('acctPanel').hidden = true;
+      if (row.dataset.id === 'demo') { setDemo(true); return; }
+      switchAccount(row.dataset.id);
+    });
+  });
+
+  const meta = state.accountsMeta || {};
+  $('acctAddBtn').disabled = !meta.canAdd;
+  $('acctAddBtn').title = meta.canAdd ? '' : (meta.message || 'Adding accounts is not enabled on this deployment.');
+}
+
+/** Register an agency's clients 5 at a time, reporting progress in the panel. */
+async function importAgencyClients(agencyId, label) {
+  let offset = 0; let total = 0; let done = 0; let result = null;
+  const status = $('acctStatus');
+  for (let guard = 0; guard < 60; guard += 1) {
+    status.className = 'sub';
+    status.textContent = total ? `Adding client accounts… ${done} of ${total}` : 'Finding client accounts…';
+    const { body } = await api('/api/accounts', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'import-clients', id: agencyId, offset }),
+    });
+    if (!body.ok) { status.className = 'sub err'; status.textContent = body.message || body.error; return null; }
+    result = body; total = body.total; offset = body.offset; done = offset;
+    if (!body.remaining) break;
+  }
+  await loadAccounts();
+  renderAcctPanel();
+  if (!result) return null;
+  const pend = result.pending ? ` ${result.pending} more awaiting HYROS approval.` : '';
+  if (result.clientModeStatus === 'unsupported') {
+    note(`<b>${esc(label)}</b>: found ${total} client accounts and listed them, but the HYROS MCP does not honor <code>accessible_account_id</code> yet (${esc(result.clientModeError || 'probe failed')}). They'll become loadable the moment the API supports it — no re-adding needed.${pend}`, true);
+  } else {
+    note(`<b>${esc(label)}</b>: added ${total} client accounts (client access verified via <code>${esc(result.clientMode)}</code>). They build on the daily refresh cycle, or pick one now to build it immediately.${pend}`);
+  }
+  return result;
+}
+
+function openReplaceKey(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  $('acctForm').dataset.replace = id;
+  $('acctFormTitle').textContent = `New HYROS API key for ${a?.label || id}`;
+  $('acctAgencyRow').hidden = true;
+  $('acctAddBtn').hidden = true;
+  $('acctForm').hidden = false;
+  $('acctStatus').className = 'sub';
+  $('acctStatus').textContent = 'The replacement key must belong to the same HYROS account.';
+  $('acctKey').value = '';
+  $('acctKey').focus();
+}
+
+async function switchAccount(id) {
+  if (state.demo) setDemo(false, { silent: true });
+  if (id === state.account && state.origin !== 'none') return;
+  state.account = id;
+  localStorage.setItem('aihyros_account', id);
+  state.path = [];
+  resetStageFilter();
+  note('Loading account…');
+  try {
+    await load();
+    pickValidRange();
+    renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
+    renderActiveFeature();
+    $('reportNote').innerHTML = '';
+    if (state.origin === 'none') firstBuild();
+  } catch (err) {
+    note(`Could not load this account: ${esc(err.message)}`, true);
+  }
+}
+
+/** An account with no snapshot yet: build it now, then reload. */
+async function firstBuild() {
+  const a = state.accounts.find((x) => x.id === state.account);
+  note(`<b>Building the first snapshot for ${esc(a?.label || 'this account')}…</b> pulling reports, CRM, curves and health from the HYROS MCP. Usually under a minute.`);
+  const btn = $('refreshBtn');
+  btn.disabled = true; btn.textContent = 'Building…';
+  try {
+    const { body } = await api('/api/refresh', { method: 'POST' });
+    if (!body.ok) {
+      const hint = body.error === 'key_invalid' ? ' Open the account selector and use <b>Replace key</b>.' : '';
+      note(`First build failed: ${esc(body.message || body.error)}${hint}`, true);
+      await loadAccounts();
+      return;
+    }
+    await load();
+    await loadAccounts();
+    pickValidRange();
+    renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
+    note(`Built in ${(body.ms / 1000).toFixed(1)}s.` + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+  } catch (err) {
+    note(`First build failed: ${esc(err.message)}`, true);
+  } finally {
+    btn.disabled = state.demo; btn.textContent = 'Refresh';
+  }
+}
+
+async function removeAccount(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  if (!window.confirm(`Remove ${a?.label || id} from this dashboard? Its stored snapshot and settings are deleted; the HYROS account itself is untouched.`)) return;
+  try {
+    const { body } = await api(`/api/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!body.ok) { note(body.message || 'Could not remove the account.', true); return; }
+    await loadAccounts();
+    renderAcctPanel();
+    if (state.account === id) {
+      if (state.accounts.length) switchAccount(state.accounts[0].id);
+      else { state.account = null; localStorage.removeItem('aihyros_account'); setDemo(true, { silent: true }); note('Last account removed — showing the Demo account.'); }
+    }
+    await refreshSetupState(); renderSetupBanner();
+  } catch (err) { note(`Remove failed: ${esc(err.message)}`, true); }
+}
+
+$('acctBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = $('acctPanel');
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) { renderAcctPanel(); $('acctForm').hidden = true; $('acctAddBtn').hidden = false; }
+});
+$('acctPanel').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { $('acctPanel').hidden = true; });
+
+$('acctAddBtn').addEventListener('click', () => {
+  delete $('acctForm').dataset.replace;
+  $('acctFormTitle').textContent = 'HYROS API key for the account to add';
+  $('acctAgencyRow').hidden = false;
+  $('acctAgency').checked = false;
+  $('acctAddBtn').hidden = true;
+  $('acctForm').hidden = false;
+  $('acctStatus').className = 'sub';
+  $('acctStatus').textContent = 'The key is verified against HYROS, encrypted, and never shown again.';
+  $('acctKey').value = '';
+  $('acctKey').focus();
+});
+$('acctCancel').addEventListener('click', () => { $('acctForm').hidden = true; $('acctAddBtn').hidden = false; delete $('acctForm').dataset.replace; });
+
+$('acctForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const apiKey = $('acctKey').value.trim();
+  if (!apiKey) return;
+  const btn = $('acctConnect');
+  const replaceId = $('acctForm').dataset.replace || null;
+  const agency = $('acctAgency').checked;
+  btn.disabled = true;
+  $('acctStatus').className = 'sub';
+  $('acctStatus').textContent = 'Checking the key with HYROS…';
+  try {
+    const { body } = await api('/api/accounts', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(replaceId ? { action: 'replace-key', id: replaceId, apiKey } : { apiKey, agency }),
+    });
+    if (!body.ok) { $('acctStatus').className = 'sub err'; $('acctStatus').textContent = body.message || body.error; return; }
+    $('acctKey').value = '';
+    await loadAccounts();
+    if (replaceId) {
+      renderAcctPanel(); $('acctForm').hidden = true; $('acctAddBtn').hidden = false; delete $('acctForm').dataset.replace;
+      note(`Key replaced for <b>${esc(body.account.label)}</b> — its clients are loadable again.`);
+      return;
+    }
+    const account = body.account;
+    // Agency: either the box was ticked or HYROS reports client accounts — register them in batches of 5.
+    if (body.clientsFound > 0 && (agency || body.clientsApproved > 0)) {
+      if (agency || window.confirm(`${account.label} has ${body.clientsApproved} approved client account${body.clientsApproved === 1 ? '' : 's'}. Add them all?`)) {
+        await importAgencyClients(account.id, account.label);
+      }
+    }
+    $('acctPanel').hidden = true;
+    $('acctForm').hidden = true; $('acctAddBtn').hidden = false;
+    await refreshSetupState(); renderSetupBanner();
+    switchAccount(account.id);
+  } catch (err) {
+    $('acctStatus').className = 'sub err'; $('acctStatus').textContent = err.message;
+  } finally { btn.disabled = false; }
+});
+
+/* ---------- view tabs ---------- */
+
+const CORE_VIEWS = ['report', 'crm'];
+const VIEWS = () => [...CORE_VIEWS, ...state.features.filter((f) => f.view).map((f) => f.id)];
+const featureById = (id) => state.features.find((f) => f.id === id && f.view) || null;
+const isDemoOnlyView = (v) => featureById(v)?.manifest.mode === 'demo';
+
+function selectView(view) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+  for (const v of VIEWS()) { const el = $(`view-${v}`); if (el) el.hidden = v !== view; }
+  const f = featureById(view);
+  if (f) renderFeature(f);
+  updateHProxy();
+}
+
+function activeView() {
+  return VIEWS().find((v) => !$(`view-${v}`).hidden) || 'report';
+}
+
+/* ---------- features (public/features/<id>/ — see FEATURES.md) ---------- */
+
+let featuresMounted = null;
+
+/** Load every registered feature once: a tab + a section per feature, its stylesheet linked. */
+function mountFeatures() {
+  if (featuresMounted) return featuresMounted;
+  featuresMounted = (async () => {
+    state.features = await loadFeatures();
+    const nav = document.querySelector('.tabs');
+    const anchor = $('view-crm');
+    for (const f of state.features) {
+      if (!f.view) { console.warn(`[feature ${f.id}] not loaded: ${f.error}`); continue; }
+      const tab = document.createElement('button');
+      tab.className = 'tab'; tab.dataset.view = f.id; tab.id = `tab-${f.id}`; tab.hidden = true;
+      tab.textContent = f.manifest.tab;
+      tab.title = f.manifest.description || '';
+      tab.addEventListener('click', () => selectView(f.id));
+      nav.appendChild(tab);
+      const sec = document.createElement('section');
+      sec.className = 'panel feature'; sec.id = `view-${f.id}`; sec.hidden = true; sec.dataset.feature = f.id;
+      anchor.insertAdjacentElement('afterend', sec);
+      if (f.manifest.style) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = `/features/${f.id}/style.css`;
+        document.head.appendChild(link);
+      }
+    }
+  })();
+  return featuresMounted;
+}
+
+/** Should this feature's tab show for the current snapshot / mode? */
+function featureVisible(f) {
+  const s = state.snapshot || {};
+  const has = Boolean(s[f.id]) && needsMet(f.manifest, s);
+  if (f.manifest.mode === 'demo') return state.demo && has;
+  if (f.manifest.mode === 'live') return !state.demo && has;
+  return has;
+}
+
+function renderFeatureTabs() {
+  for (const f of state.features) {
+    if (!f.view) continue;
+    $(`tab-${f.id}`).hidden = !featureVisible(f);
+  }
+}
+
+/** The context handed to a feature's render(ctx) — the only API features use. */
+function featureCtx(f) {
+  return {
+    id: f.id, manifest: f.manifest,
+    root: $(`view-${f.id}`),
+    snapshot: state.snapshot, block: state.snapshot?.[f.id] ?? null,
+    demo: state.demo, account: state.account, range: state.range, level: state.level,
+    fmt, esc, kpis: kpiTiles, formatCell,
+    note, openJourney: (email) => openJourney(email, true),
+    api: (path, opts) => api(path, opts),
+    selectView,
+  };
+}
+
+function renderFeature(f) {
+  try { f.view.render(featureCtx(f)); }
+  catch (err) {
+    console.error(`[feature ${f.id}]`, err);
+    $(`view-${f.id}`).innerHTML = `<div class="note err"><b>${esc(f.manifest.name)} failed to render.</b> ${esc(err.message)} — see the console; the rest of the dashboard is unaffected.</div>`;
+  }
+}
+
+function renderActiveFeature() {
+  const f = featureById(activeView());
+  if (f) renderFeature(f);
+}
+
+document.querySelectorAll('.tabs .tab').forEach((tab) => {
+  tab.addEventListener('click', () => selectView(tab.dataset.view));
+});
+
+/* ---------- demo mode ---------- */
+
+function resetStageFilter() {
+  const sel = $('stageFilter');
+  while (sel.options.length > 1) sel.remove(1);
+  sel.value = '';
+  state.crm.stage = '';
+}
+
+function pickValidRange() {
+  const ranges = state.snapshot.ranges || {};
+  if (!ranges[state.range] || ranges[state.range].unavailable) {
+    const ok = Object.keys(ranges).find((k) => !ranges[k].unavailable);
+    if (ok) state.range = ok;
+  }
+}
+
+function setDemo(on, { silent = false } = {}) {
+  if (on === state.demo && !silent) return;
+  if (!on && !state.accounts.length) {
+    // Nothing to switch back to: the Demo account is the only account.
+    note('<b>Demo account.</b> No HYROS account is connected yet — open the account menu (top left) and add your API key to see your own data.');
+    return;
+  }
+  fmt.cents = !on; // whole dollars on the demo projector, cents on real data
+  if (on) {
+    if (!demoSnaps) {
+      const last = buildDemoSnapshot();
+      demoSnaps = { last: applyDemoFeatures(last, state.features), custom: applyDemoFeatures(applyAttribution(last), state.features) };
+    }
+    if (!state.demo) realCache = { snapshot: state.snapshot, origin: state.origin };
+    state.snapshot = demoSnaps[state.demoModel];
+    state.origin = 'demo';
+  } else if (realCache) {
+    state.snapshot = realCache.snapshot;
+    state.origin = realCache.origin;
+  }
+  state.demo = on;
+  sessionStorage.setItem('aihyros_demo', on ? '1' : '');
+
+  state.path = [];
+  resetStageFilter();
+  pickValidRange();
+  closeDrawer();
+  if (!on && isDemoOnlyView(activeView())) selectView('report');
+  { const f = featureById(activeView()); if (f && !featureVisible(f)) selectView('report'); }
+
+  renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
+  renderActiveFeature();
+
+  if (!silent) {
+    if (on) {
+      note('<b>Demo mode.</b> Everything on screen — report, CRM, drill-downs, journeys — is '
+        + 'synthetic, profitable-looking data for demos. No real customer data is shown. '
+        + 'Click the DEMO badge to switch back.');
+    } else {
+      $('reportNote').innerHTML = '';
+    }
+  }
+}
+
+$('originBadge').addEventListener('click', () => setDemo(!state.demo));
+
+/* Attribution model selector (demo-only). */
+function setAttrModel(model) {
+  state.demoModel = model;
+  $('attrBtn').textContent = model === 'custom' ? '⚖ Attribution: Custom HYROS' : '⚖ Attribution: Last Click';
+  $('attrPanel').querySelectorAll('.attr-opt').forEach((b) =>
+    b.classList.toggle('active', b.dataset.model === model));
+  if (!state.demo) return;
+  state.snapshot = demoSnaps[model];
+  renderChrome(); renderReport();
+  renderActiveFeature();
+  note(model === 'custom'
+    ? '<b>Custom HYROS attribution.</b> Credit is reassigned to the clicks that created the '
+      + 'customer — watch prospecting campaigns rise and retargeting / brand search fall. '
+      + 'Account totals are identical: attribution moves credit, it never invents revenue.'
+    : '<b>Last Click attribution.</b> All credit goes to the final tracked click before the sale.');
+}
+
+$('attrBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = $('attrPanel');
+  panel.hidden = !panel.hidden;
+});
+$('attrPanel').addEventListener('click', (e) => e.stopPropagation());
+$('attrPanel').querySelectorAll('.attr-opt').forEach((b) =>
+  b.addEventListener('click', () => { $('attrPanel').hidden = true; setAttrModel(b.dataset.model); }));
+document.addEventListener('click', () => { $('attrPanel').hidden = true; });
+
+$('refreshBtn').addEventListener('click', async () => {
+  const btn = $('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  try {
+    const { body } = await api('/api/refresh', { method: 'POST' });
+    if (body.ok) {
+      await load();
+      renderChrome(); renderRangeChips(); renderReport(); renderCrm();
+      note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.`
+        + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+    } else {
+      note(`Refresh failed: ${esc(body.message || body.error)}`, true);
+    }
+  } catch (err) {
+    note(`Refresh failed: ${esc(err.message)}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  }
+});
+
+function note(msg, isErr) {
+  $('reportNote').innerHTML = `<div class="note${isErr ? ' err' : ''}">${msg}</div>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Column selector + drag order + save
+ * ------------------------------------------------------------------ */
+
+function renderColPanel() {
+  const q = ($('colSearch').value || '').toLowerCase();
+  const selected = new Set(state.cols);
+  const groups = new Map();
+  for (const c of CATALOG) {
+    if (q && !`${c.l} ${c.k}`.toLowerCase().includes(q)) continue;
+    if (!groups.has(c.g)) groups.set(c.g, []);
+    groups.get(c.g).push(c);
+  }
+
+  $('colGroups').innerHTML = [...groups.entries()].map(([group, entries]) => `
+    <div class="col-group">
+      <div class="col-group-title">${esc(group)}</div>
+      ${entries.map((c) => `
+        <label class="col-opt ${c.a === null ? 'nonagg' : ''}"
+               title="${c.a === null ? 'Native metric — shows at Ad Set / Ad level; rolled-up Campaign/Traffic rows show —' : ''}">
+          <input type="checkbox" data-key="${c.k}" ${selected.has(c.k) ? 'checked' : ''}>
+          <span>${esc(c.l)}</span>
+          ${c.a === null ? '<span class="pill">native</span>' : ''}
+        </label>`).join('')}
+    </div>`).join('') || '<div class="empty">No metrics match.</div>';
+
+  $('colCount').textContent = `${state.cols.length} of ${CATALOG.length} columns`;
+
+  $('colGroups').querySelectorAll('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.key;
+      state.cols = cb.checked
+        ? [...state.cols, key]
+        : state.cols.filter((k) => k !== key);
+      persistColsLocal();
+      $('colCount').textContent = `${state.cols.length} of ${CATALOG.length} columns`;
+      renderReport();
+    });
+  });
+}
+
+$('colBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = $('colPanel');
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) renderColPanel();
+});
+$('colPanel').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { $('colPanel').hidden = true; });
+$('colSearch').addEventListener('input', renderColPanel);
+$('colReset').addEventListener('click', () => {
+  localStorage.removeItem('aihyros_cols');
+  const server = state.serverPrefs?.cols;
+  state.cols = Array.isArray(server) && server.length
+    ? server.filter((k) => CATALOG_BY_KEY.has(k)) : [...DEFAULT_KEYS];
+  renderColPanel();
+  renderReport();
+});
+
+$('saveViewBtn').addEventListener('click', async () => {
+  const btn = $('saveViewBtn');
+  btn.disabled = true;
+  try {
+    const { body } = await api('/api/prefs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cols: state.cols }),
+    });
+    persistColsLocal();
+    if (body.persisted) {
+      state.serverPrefs = { cols: [...state.cols] };
+      note('View saved — this column loadout and order is now the default for everyone.');
+    } else {
+      note(body.message || 'Saved in this browser only (KV not configured).', true);
+    }
+  } catch (err) {
+    note(`Save failed: ${esc(err.message)}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* Drag & drop on the table header reorders state.cols. */
+let dragKey = null;
+
+function wireHeaderDrag(th) {
+  const key = th.dataset.col;
+  if (key === 'name') return;
+  th.draggable = true;
+  th.addEventListener('dragstart', (e) => {
+    dragKey = key;
+    th.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  th.addEventListener('dragend', () => { dragKey = null; th.classList.remove('dragging'); });
+  th.addEventListener('dragover', (e) => {
+    if (!dragKey || dragKey === key) return;
+    e.preventDefault();
+    th.classList.add('drop-target');
+  });
+  th.addEventListener('dragleave', () => th.classList.remove('drop-target'));
+  th.addEventListener('drop', (e) => {
+    e.preventDefault();
+    th.classList.remove('drop-target');
+    if (!dragKey || dragKey === key) return;
+    const from = state.cols.indexOf(dragKey);
+    const to = state.cols.indexOf(key);
+    if (from < 0 || to < 0) return;
+    state.cols.splice(to, 0, ...state.cols.splice(from, 1));
+    persistColsLocal();
+    renderReport();
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Hierarchy: breadcrumb path filters the ad-set base table
+ * ------------------------------------------------------------------ */
+
+const CRUMB_FILTER = {
+  traffic:  (a, id) => a._traffic === id,
+  account:  (a, id) => a._account === id,
+  campaign: (a, id) => a._category === id,
+  adset:    (a, id) => a.id === id,
+};
+
+function withTags(rows, adsets, keyOf) {
+  return rows.map((row) => ({
+    ...row,
+    tags: [...new Set(adsets.filter((a) => keyOf(a) === row.id && a.tag).map((a) => a.tag))].slice(0, 40),
+  }));
+}
+
+/**
+ * Ads under a set of ad sets. Linkage is by parentId when the row carries it
+ * (MCP upgrade, Sept 2026 — exact), falling back to parent NAME for older
+ * snapshots (duplicate ad-set names can over-match there). Each ad inherits
+ * its parent's source tag so the lead drill works at ad level too — the
+ * cohort is the parent ad set's, which the drawer says.
+ */
+function adsUnder(block, adsets) {
+  const byId = new Map(adsets.map((a) => [a.id, a]));
+  const byName = new Map(adsets.map((a) => [a.name, a]));
+  const out = [];
+  for (const x of block.levels.ad) {
+    const parent = x.parentId ? byId.get(x.parentId) : byName.get(x.parentName);
+    if (!parent) continue;
+    out.push(x.tag ? x : { ...x, tag: parent.tag || null, _parentSet: parent.name });
+  }
+  return out;
+}
+
+/** Levels recomputed under the current breadcrumb path. */
+function effectiveLevels(block) {
+  if (!state.path.length) return { ...block.levels, ad: adsUnder(block, block.levels.adset) };
+
+  let adsets = block.levels.adset;
+  for (const crumb of state.path) {
+    const filter = CRUMB_FILTER[crumb.level];
+    if (filter) adsets = adsets.filter((a) => filter(a, crumb.id));
+  }
+  const ads = adsUnder(block, adsets);
+
+  const accountName = new Map(state.snapshot.adAccounts.map((a) => [String(a.id), a.name]));
+  return {
+    traffic:  withTags(rollup(adsets, (r) => r._traffic, (id) => id), adsets, (a) => a._traffic),
+    account:  withTags(rollup(adsets, (r) => r._account, (id) => accountName.get(id) || id || 'Unknown'), adsets, (a) => a._account),
+    campaign: withTags(rollup(adsets, (r) => r._category, (id) => id), adsets, (a) => a._category),
+    adset:    adsets,
+    ad:       ads,
+  };
+}
+
+function descend(row) {
+  const child = CHILD_LEVEL[state.level];
+  if (!child) return;
+  state.path.push({ level: state.level, id: row.id, name: row.name || row.id });
+  state.level = child;
+  renderLevelChips();
+  renderReport();
+}
+
+function renderCrumbs() {
+  const el = $('crumbs');
+  if (!state.path.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = `
+    <button class="crumb" data-i="-1">All</button>
+    ${state.path.map((c, i) => `
+      <span class="crumb-sep">›</span>
+      <button class="crumb ${i === state.path.length - 1 ? 'current' : ''}" data-i="${i}"
+              title="${esc(LEVEL_LABEL[c.level])}">${esc(c.name)}</button>`).join('')}
+    <button class="crumb clear" data-i="clear" title="Clear drill-down">✕</button>`;
+  el.querySelectorAll('.crumb').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const i = btn.dataset.i;
+      if (i === 'clear' || i === '-1') {
+        state.path = [];
+      } else {
+        const idx = Number(i);
+        state.path = state.path.slice(0, idx + 1);
+        state.level = CHILD_LEVEL[state.path[idx].level] || state.level;
+      }
+      renderLevelChips();
+      renderReport();
+    });
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Report
+ * ------------------------------------------------------------------ */
+
+function renderRangeChips() {
+  const ranges = state.snapshot.ranges || {};
+  $('rangeChips').innerHTML = Object.entries(ranges).map(([key, r]) => `
+    <button class="chip ${key === state.range ? 'active' : ''}"
+            data-range="${key}" ${r.unavailable ? 'disabled' : ''}
+            title="${r.unavailable ? 'Not in the baked seed snapshot — Refresh with live credentials' : `${r.start} → ${r.end}`}">
+      ${esc(r.label)}
+    </button>`).join('');
+
+  $('rangeChips').querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => { state.range = c.dataset.range; renderRangeChips(); renderReport(); }));
+}
+
+function renderLevelChips() {
+  $('levelChips').innerHTML = LEVELS.map((l) => `
+    <button class="chip ${l.key === state.level ? 'active' : ''}" data-level="${l.key}">${l.label}</button>`).join('');
+  $('levelChips').querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => { state.level = c.dataset.level; renderLevelChips(); renderReport(); }));
+}
+
+$('reportSearch').addEventListener('input', (e) => { state.search = e.target.value.toLowerCase(); renderReport(); });
+$('hideZero').addEventListener('change', (e) => { state.hideZero = e.target.checked; renderReport(); });
+
+function currentRows() {
+  const block = state.snapshot.ranges?.[state.range];
+  if (!block || block.unavailable) return null;
+  let rows = effectiveLevels(block)[state.level] || [];
+  if (state.search) rows = rows.filter((r) =>
+    `${r.name ?? ''} ${r.parentName ?? ''} ${r.id}`.toLowerCase().includes(state.search));
+  if (state.hideZero) rows = rows.filter((r) => (r.cost || 0) > 0 || (r.revenue || 0) > 0);
+
+  const { col, dir } = state.sort;
+  return [...rows].sort((a, b) => {
+    const av = a[col], bv = b[col];
+    if (typeof av === 'string' || typeof bv === 'string') {
+      return dir === 'asc'
+        ? String(av ?? '').localeCompare(String(bv ?? ''))
+        : String(bv ?? '').localeCompare(String(av ?? ''));
+    }
+    const an = Number.isFinite(av) ? av : -Infinity;
+    const bn = Number.isFinite(bv) ? bv : -Infinity;
+    return dir === 'asc' ? an - bn : bn - an;
+  });
+}
+
+function toneClass(col, value) {
+  if (!col.tone || !Number.isFinite(value) || value === 0) return '';
+  return value > 0 ? 'good' : 'bad';
+}
+
+function rowDrillTags(row) {
+  if (row.tag) return [row.tag];
+  if (Array.isArray(row.tags) && row.tags.length) return row.tags;
+  return null;
+}
+
+function renderReport() {
+  renderCrumbs();
+  const block = state.snapshot.ranges?.[state.range];
+  const rows = currentRows();
+
+  if (!rows) {
+    $('reportKpis').innerHTML = '';
+    $('reportTable').innerHTML =
+      `<tbody><tr><td class="empty">This range is not in the baked seed snapshot.<br>
+       Set <code>HYROS_MCP_URL</code> + <code>HYROS_API_KEY</code> and hit Refresh to load it live.</td></tr></tbody>`;
+    $('reportCount').textContent = '';
+    updateHProxy();
+    return;
+  }
+
+  const cols = activeCols();
+  const totals = aggregate(rows);
+  const canDescend = Boolean(CHILD_LEVEL[state.level]);
+
+  const fmtDay = (d) => {
+    const t = new Date(`${d}T00:00:00`);
+    return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const rangeLabel = block.start === block.end
+    ? fmtDay(block.start) : `${fmtDay(block.start)} – ${fmtDay(block.end)}`;
+  $('reportKpis').innerHTML = `<div class="kpi-range">${esc(rangeLabel)}</div>` + KPIS.map((k) => {
+    const v = totals[k.key];
+    return `<div class="kpi${k.key === KPI_HY ? ' hy' : ''}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value ${toneClass(k, v)}">${formatCell(v, k.type)}</div>
+    </div>`;
+  }).join('');
+
+  const headCols = [{ k: 'name', l: 'Name', t: 'text' }, ...cols];
+  const head = headCols.map((c) => {
+    const sorted = state.sort.col === c.k;
+    const arrow = sorted ? (state.sort.dir === 'asc' ? '▲' : '▼') : '';
+    return `<th class="${sorted ? 'sorted' : ''}${HY.has(c.k) ? ' hy' : ''}" data-col="${c.k}"
+      title="${c.k === 'name' ? '' : 'Drag to reorder · click to sort'}">${c.l}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+
+  const body = rows.map((r, i) => `<tr data-i="${i}">${headCols.map((c) => {
+    if (c.k === 'name') {
+      const sub = r.parentName ? `<span class="sub">${esc(r.parentName)}</span>`
+        : r.children ? `<span class="pill">${r.children}</span>` : '';
+      const label = esc(r.name || r.id);
+      return `<td><div class="name-cell">${canDescend
+        ? `<button class="name-drill" data-i="${i}" title="Drill into ${esc(LEVEL_LABEL[CHILD_LEVEL[state.level]])}s">${label}</button>`
+        : `<span>${label}</span>`}${sub}</div></td>`;
+    }
+    const v = r[c.k];
+    const metric = DRILL_METRIC[c.k];
+    const drillable = metric && Number.isFinite(v) && v > 0 && rowDrillTags(r);
+    const text = formatCell(v, c.t);
+    return `<td class="${toneClass(c, v)}${HY.has(c.k) ? ' hy' : ''}">${drillable
+      ? `<button class="drill" data-i="${i}" data-metric="${metric}" data-label="${esc(c.l)}">${text}</button>`
+      : text}</td>`;
+  }).join('')}</tr>`).join('');
+
+  const foot = `<tr>${headCols.map((c) => {
+    if (c.k === 'name') return `<td>Total · ${rows.length} rows</td>`;
+    const v = totals[c.k];
+    return `<td class="${toneClass(c, v)}${HY.has(c.k) ? ' hy' : ''}">${formatCell(v, c.t)}</td>`;
+  }).join('')}</tr>`;
+
+  $('reportTable').innerHTML = rows.length
+    ? `<thead><tr>${head}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot>`
+    : `<tbody><tr><td class="empty">No rows match this filter.</td></tr></tbody>`;
+
+  $('reportCount').textContent = `${rows.length} rows`;
+
+  $('reportTable').querySelectorAll('thead th').forEach((th) => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      state.sort = state.sort.col === col
+        ? { col, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: col === 'name' ? 'asc' : 'desc' };
+      renderReport();
+    });
+    wireHeaderDrag(th);
+  });
+
+  $('reportTable').querySelectorAll('button.name-drill').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      descend(rows[Number(btn.dataset.i)]);
+    });
+  });
+
+  $('reportTable').querySelectorAll('button.drill').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDrill(rows[Number(btn.dataset.i)], btn.dataset.metric, btn.dataset.label);
+    });
+  });
+
+  updateHProxy();
+}
+
+/* ------------------------------------------------------------------ *
+ * Sticky horizontal scrollbar proxy — always reachable at the bottom
+ * of the viewport, synced both ways with the visible table wrap.
+ * ------------------------------------------------------------------ */
+
+let hTarget = null;
+
+function visibleWrap() {
+  return $('view-crm').hidden
+    ? $('reportTable').closest('.table-wrap')
+    : $('crmTable').closest('.table-wrap');
+}
+
+function updateHProxy() {
+  const proxy = $('hproxy');
+  const inner = $('hproxyInner');
+  const wrap = visibleWrap();
+  if (hTarget !== wrap) {
+    hTarget = wrap;
+    if (wrap) wrap.addEventListener('scroll', () => {
+      if (Math.abs(proxy.scrollLeft - wrap.scrollLeft) > 1) proxy.scrollLeft = wrap.scrollLeft;
+    });
+  }
+  if (!wrap || wrap.scrollWidth <= wrap.clientWidth + 4) { proxy.hidden = true; return; }
+  const rect = wrap.getBoundingClientRect();
+  proxy.hidden = false;
+  proxy.style.left = `${rect.left}px`;
+  proxy.style.width = `${rect.width}px`;
+  inner.style.width = `${wrap.scrollWidth}px`;
+  proxy.scrollLeft = wrap.scrollLeft;
+}
+
+function initHProxy() {
+  const proxy = $('hproxy');
+  proxy.addEventListener('scroll', () => {
+    if (hTarget && Math.abs(hTarget.scrollLeft - proxy.scrollLeft) > 1) {
+      hTarget.scrollLeft = proxy.scrollLeft;
+    }
+  });
+  window.addEventListener('resize', updateHProxy);
+  updateHProxy();
+}
+
+/* ------------------------------------------------------------------ *
+ * Drill drawer — number -> cohort/records -> journey
+ * ------------------------------------------------------------------ */
+
+function openDrawer(title, sub) {
+  $('drawerTitle').textContent = title;
+  $('drawerSub').innerHTML = sub || '';
+  $('drawerBody').innerHTML = '<div class="empty"><img class="sven-load" src="/assets/brand/sven-lavender.svg" alt="">Loading…</div>';
+  $('drawer').hidden = false;
+  $('drawerScrim').hidden = false;
+  $('drawerBack').hidden = true;
+  document.body.classList.add('drawer-open');
+}
+
+function closeDrawer() {
+  $('drawer').hidden = true;
+  $('drawerScrim').hidden = true;
+  document.body.classList.remove('drawer-open');
+}
+$('drawerClose').addEventListener('click', closeDrawer);
+$('drawerScrim').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+let drillContext = null;
+
+async function openDrill(row, metric, label) {
+  const tags = rowDrillTags(row);
+  drillContext = { row, metric, label };
+  openDrawer(row.name || row.id, `${esc(label)} · loading`);
+
+  if (state.demo) {
+    // Demo drills are generated locally — the API (and real customer data)
+    // is never touched while demo mode is on.
+    const body = metric === 'leads' ? demoCohort(row) : demoRecords(row, metric);
+    if (body.kind === 'leads') renderCohort(body); else renderRecords(body, label);
+    return;
+  }
+
+  try {
+    const { body } = await api(
+      `/api/drill?metric=${metric}&tags=${encodeURIComponent(tags.join(','))}`);
+    if (!body.ok) {
+      $('drawerBody').innerHTML = `<div class="note" style="margin:16px">${esc(body.message || body.error)}</div>`;
+      $('drawerSub').textContent = label;
+      return;
+    }
+    if (body.kind === 'leads') renderCohort(body);
+    else renderRecords(body, label);
+  } catch (err) {
+    $('drawerBody').innerHTML = `<div class="note err" style="margin:16px">${esc(err.message)}</div>`;
+  }
+}
+
+const touchPill = `<span class="pill" title="Cohort from get_leads({tags}) — leads that CLICKED this source. Attribution models can credit some conversions to a different source, so this can differ from the table cell.">touched ≠ credited</span>`;
+const demoPill = (origin) => (origin === 'seed' ? ' <span class="pill warn">demo data</span>'
+  : origin === 'demo' ? ' <span class="pill warn">demo</span>' : '');
+
+const adSetNote = () => (drillContext?.row?._parentSet
+  ? ` <span class="pill" title="Leads are tagged per ad set, not per ad — this is the cohort of the ad set this ad runs in.">ad set cohort: ${esc(drillContext.row._parentSet)}</span>` : '');
+
+function renderCohort(body) {
+  const leads = body.leads || [];
+  $('drawerSub').innerHTML =
+    `${leads.length}${body.truncated ? '+' : ''} leads <b>touched</b> this source ${touchPill}${adSetNote()}${demoPill(body.origin)}`;
+
+  if (!leads.length) {
+    $('drawerBody').innerHTML = '<div class="empty">No leads returned for this source.</div>';
+    return;
+  }
+
+  $('drawerBody').innerHTML = `<div class="cohort">${leads.map((l, i) => `
+    <button class="cohort-row" data-email="${esc(l.email)}">
+      <div class="cohort-main">
+        <span class="cohort-email">${esc(l.email)}</span>
+        ${l.stage ? `<span class="pill stage">${esc(l.stage)}</span>` : ''}
+      </div>
+      <div class="cohort-sub">
+        ${esc(fmt.date(l.joined))}
+        ${l.firstSource?.ad ? ` · ad: ${esc(l.firstSource.ad)}` : ''}
+        ${l.lastSource && l.lastSource.tag !== l.firstSource?.tag
+          ? ` · last: ${esc(l.lastSource.name)}${l.lastSource.organic ? ' (organic)' : ''}` : ''}
+      </div>
+    </button>`).join('')}</div>`;
+
+  wireDrawerRows();
+}
+
+function renderRecords(body, label) {
+  const records = body.records || [];
+  const isSales = body.kind === 'sales';
+  const total = isSales ? records.reduce((s, r) => s + (r.amount || 0), 0) : null;
+
+  $('drawerSub').innerHTML =
+    `${records.length} ${esc(body.kind)} from ${body.cohortSize}${body.truncated ? '+' : ''} touched leads`
+    + (isSales && total ? ` · <b class="good">${fmt.money(total)}</b>` : '')
+    + ` ${touchPill}${adSetNote()}${demoPill(body.origin)}`;
+
+  if (!records.length) {
+    $('drawerBody').innerHTML = `<div class="empty">No ${esc(body.kind)} recorded for this cohort in the window.</div>`;
+    return;
+  }
+
+  $('drawerBody').innerHTML = `<div class="cohort">${records.map((r) => `
+    <button class="cohort-row" data-email="${esc(r.email)}">
+      <div class="cohort-main">
+        <span class="cohort-email">${esc(r.email)}</span>
+        ${isSales && r.amount ? `<span class="tl-extra">${fmt.money(r.amount)}</span>` : ''}
+        ${r.state ? `<span class="pill ${r.state === 'QUALIFIED' ? 'stage' : r.state === 'REFUNDED' ? 'warn' : ''}">${esc(r.state)}</span>` : ''}
+      </div>
+      <div class="cohort-sub">
+        ${esc(fmt.datetime(r.date))}${r.name ? ` · ${esc(r.name)}` : ''}${r.source ? ` · src: ${esc(r.source)}` : ''}
+      </div>
+    </button>`).join('')}</div>`;
+
+  wireDrawerRows();
+}
+
+function wireDrawerRows() {
+  $('drawerBody').querySelectorAll('.cohort-row').forEach((el) => {
+    el.addEventListener('click', () => openJourney(el.dataset.email));
+  });
+}
+
+async function openJourney(email, standalone = false) {
+  if (standalone) {
+    drillContext = null;
+    openDrawer(email, 'Lead journey');
+  } else {
+    $('drawerTitle').textContent = email;
+    $('drawerSub').textContent = 'Lead journey';
+    $('drawerBody').innerHTML = '<div class="empty"><img class="sven-load" src="/assets/brand/sven-lavender.svg" alt="">Loading…</div>';
+  }
+  $('drawerBack').hidden = !drillContext;
+
+  if (state.demo) {
+    renderJourney(demoJourney(email).journey, 'demo');
+    return;
+  }
+
+  try {
+    const { body } = await api(`/api/drill?email=${encodeURIComponent(email)}`);
+    if (!body.ok) {
+      $('drawerBody').innerHTML = `<div class="note" style="margin:16px">${esc(body.message || body.error)}</div>`;
+      return;
+    }
+    renderJourney(body.journey, body.origin);
+  } catch (err) {
+    $('drawerBody').innerHTML = `<div class="note err" style="margin:16px">${esc(err.message)}</div>`;
+  }
+}
+
+const JOURNEY_ICONS = {
+  sale: '💰', call: '📞', 'lead-stage': '🏁', 'opt-in': '✉️', sl: '🖱️', action: '⚡',
+};
+
+function renderJourney(j, origin) {
+  const income = (j.sales || []).reduce((s, x) => s + (x.amount || 0), 0);
+  const l = j.lead || {};
+
+  $('drawerSub').innerHTML =
+    `${l.stage ? `<span class="pill stage">${esc(l.stage)}</span> ` : ''}`
+    + `joined ${esc(fmt.date(l.joined))}`
+    + (income ? ` · <b class="good">${fmt.money(income)}</b>` : '')
+    + demoPill(origin);
+
+  const timeline = (j.journey || []).map((e) => `
+    <div class="tl-item tl-${esc(e.type)}">
+      <div class="tl-icon">${JOURNEY_ICONS[e.type] || '•'}</div>
+      <div class="tl-body">
+        <div class="tl-head">
+          <b>${esc(e.keyword)}</b> ${esc(e.name)}
+          ${e.extra ? `<span class="tl-extra">${esc(e.extra)}</span>` : ''}
+        </div>
+        ${e.subNames?.length ? `<div class="tl-sub">${esc(e.subNames.join(', '))}</div>` : ''}
+        <div class="tl-date">${esc(fmt.datetime(e.date))}</div>
+      </div>
+    </div>`).join('');
+
+  const clicks = (j.clicks || []).length ? `
+    <div class="drawer-section">Click history · ${j.clicks.length} tracked clicks</div>
+    <div class="clicks">${j.clicks.map((c) => `
+      <div class="click-row">
+        <div class="click-page">${esc((c.page || '').replace(/^https?:\/\//, ''))}
+          ${c.source ? `<span class="pill">${esc(c.source)}</span>` : ''}
+          ${c.platform ? `<span class="pill fb">${esc(c.platform)}</span>` : ''}
+        </div>
+        <div class="click-sub">
+          ${c.previousUrl ? `from ${esc(c.previousUrl.replace(/^https?:\/\//, ''))} · ` : ''}${esc(fmt.datetime(c.date))}
+        </div>
+      </div>`).join('')}</div>` : '';
+
+  $('drawerBody').innerHTML = `
+    <div class="drawer-section">Journey</div>
+    <div class="timeline">${timeline || '<div class="empty">No journey events.</div>'}</div>
+    ${clicks}`;
+}
+
+$('drawerBack').addEventListener('click', () => {
+  if (!drillContext) return closeDrawer();
+  openDrill(drillContext.row, drillContext.metric, drillContext.label);
+});
+
+/* ------------------------------------------------------------------ *
+ * CRM
+ * ------------------------------------------------------------------ */
+
+const CRM_TABS = [
+  { key: 'leads', label: 'Leads' },
+  { key: 'sales', label: 'Sales' },
+  { key: 'calls', label: 'Calls' },
+  { key: 'subscriptions', label: 'Subscriptions' },
+];
+
+const CRM_COLUMNS = [
+  { key: 'joined',         label: 'Joined on',        txt: true },
+  { key: 'email',          label: 'Lead',             txt: true },
+  { key: 'name',           label: 'Name',             txt: true },
+  { key: 'firstSourceName',label: 'First Source',     txt: true },
+  { key: 'lastSourceName', label: 'Last Source',      txt: true },
+  { key: 'lastSourceDate', label: 'Last Source Date', txt: true },
+  { key: 'income',         label: 'Income' },
+  { key: 'stage',          label: 'Stage',            txt: true },
+  { key: 'consent',        label: 'Ad O.C.',          txt: true },
+  { key: 'tagList',        label: 'Tags',             txt: true },
+];
+
+function sortRows(rows, sort) {
+  return rows.sort((a, b) => {
+    const av = a[sort.col], bv = b[sort.col];
+    if (typeof av === 'number' || typeof bv === 'number') {
+      return sort.dir === 'asc' ? (av || 0) - (bv || 0) : (bv || 0) - (av || 0);
+    }
+    return sort.dir === 'asc'
+      ? String(av ?? '').localeCompare(String(bv ?? ''))
+      : String(bv ?? '').localeCompare(String(av ?? ''));
+  });
+}
+
+function crmRows() {
+  const leads = (state.snapshot.crm?.leads || []).map((l) => ({
+    ...l,
+    firstSourceName: l.firstSource?.name || null,
+    lastSourceName: l.lastSource?.name || null,
+    tagList: (l.tags || []).join(' '),
+  }));
+
+  const { stage, attr, search, sort } = state.crm;
+  let rows = leads;
+  if (stage) rows = rows.filter((l) => l.stage === stage);
+  if (attr === 'yes') rows = rows.filter((l) => l.hasAttribution);
+  if (attr === 'no') rows = rows.filter((l) => !l.hasAttribution);
+  if (search) rows = rows.filter((l) =>
+    `${l.email} ${l.name ?? ''} ${l.firstSourceName ?? ''} ${l.tagList}`.toLowerCase().includes(search));
+  return sortRows(rows, sort);
+}
+
+function recordRows(kind) {
+  const rows = state.snapshot.crm?.[kind];
+  if (!Array.isArray(rows)) return null; // old snapshot — needs a Refresh
+  const { search, sort } = state.crm;
+  let out = rows;
+  if (search) out = out.filter((r) =>
+    `${r.email} ${r.leadName ?? ''} ${r.product ?? ''} ${r.name ?? ''} ${r.firstSource ?? ''} ${r.lastSource ?? ''}`
+      .toLowerCase().includes(search));
+  const col = sort.col === 'joined' ? 'date' : sort.col;
+  return sortRows([...out], { ...sort, col });
+}
+
+function renderCrmTabs() {
+  const crm = state.snapshot.crm || {};
+  const counts = {
+    leads: (crm.leads || []).length,
+    sales: Array.isArray(crm.sales) ? crm.sales.length : '?',
+    calls: Array.isArray(crm.calls) ? crm.calls.length : '?',
+    subscriptions: Array.isArray(crm.subscriptions) ? crm.subscriptions.length : '?',
+  };
+  $('crmTabs').innerHTML = CRM_TABS.map((t) => `
+    <button class="chip ${state.crm.tab === t.key ? 'active' : ''}" data-tab="${t.key}">
+      ${t.label} <span class="chip-count">${counts[t.key]}</span>
+    </button>`).join('');
+  $('crmTabs').querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => { state.crm.tab = c.dataset.tab; renderCrm(); }));
+
+  const leadsOnly = state.crm.tab === 'leads';
+  $('stageFilter').hidden = !leadsOnly;
+  $('attrFilter').hidden = !leadsOnly;
+}
+
+function kpiTiles(list) {
+  return list.map((k) => `<div class="kpi">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value ${k.cls || ''}">${k.value}</div>
+      <div class="kpi-sub">${k.sub || ''}</div>
+    </div>`).join('');
+}
+
+function attachCrmSort() {
+  $('crmTable').querySelectorAll('thead th').forEach((th) => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      state.crm.sort = state.crm.sort.col === col
+        ? { col, dir: state.crm.sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'desc' };
+      renderCrm();
+    });
+  });
+  $('crmTable').querySelectorAll('button.drill[data-email]').forEach((btn) => {
+    btn.addEventListener('click', () => openJourney(btn.dataset.email, true));
+  });
+  updateHProxy();
+}
+
+function headRow(cols) {
+  return `<thead><tr>${cols.map((c) => {
+    const sorted = state.crm.sort.col === c.key;
+    const arrow = sorted ? (state.crm.sort.dir === 'asc' ? '▲' : '▼') : '';
+    return `<th class="${sorted ? 'sorted' : ''} ${c.txt ? 'txt' : ''}" data-col="${c.key}">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('')}</tr></thead>`;
+}
+
+const emailCell = (email) =>
+  `<td class="txt"><button class="drill clip clip-l" title="${esc(email)}" data-email="${esc(email)}">${esc(email)}</button></td>`;
+const dash = '<span class="sub">—</span>';
+const clip = (text, size = 'm', extra = '') => (text
+  ? `<span class="clip clip-${size}" title="${esc(text)}">${esc(text)}${extra}</span>`
+  : dash);
+
+function renderCrm() {
+  renderCrmTabs();
+  const tab = state.crm.tab;
+  if (tab === 'leads') return renderCrmLeads();
+  if (tab === 'sales') return renderCrmSales();
+  if (tab === 'calls') return renderCrmCalls();
+  return renderCrmSubs();
+}
+
+function needsRefresh(label) {
+  $('crmKpis').innerHTML = '';
+  $('crmTable').innerHTML = `<tbody><tr><td class="empty">${label} aren’t in the current snapshot —
+    it was built before this feature shipped.<br>Hit <b>Refresh</b> to pull them from the MCP.</td></tr></tbody>`;
+  $('crmCount').textContent = '';
+  updateHProxy();
+}
+
+function renderCrmLeads() {
+  const crm = state.snapshot.crm || { leads: [], stages: [], totals: {} };
+  const sel = $('stageFilter');
+  if (sel.options.length <= 1) {
+    for (const st of crm.stages || []) {
+      const o = document.createElement('option');
+      o.value = st.name;
+      o.textContent = `${st.name} (${st.amount})`;
+      sel.appendChild(o);
+    }
+  }
+
+  const rows = crmRows();
+  const income = rows.reduce((s, l) => s + (l.income || 0), 0);
+  const attributed = rows.filter((l) => l.hasAttribution).length;
+
+  $('crmKpis').innerHTML = kpiTiles([
+    { label: 'Leads in view', value: fmt.int(rows.length) },
+    { label: 'Attributed', value: fmt.int(attributed),
+      sub: rows.length ? `${((attributed / rows.length) * 100).toFixed(0)}% have a click source` : '' },
+    { label: 'Customers', value: fmt.int(rows.filter((l) => l.stage === 'Customer').length) },
+    { label: 'Income', value: fmt.money(income), sub: 'joined from sales by email' },
+    { label: 'Account total', value: fmt.int((crm.stages || []).reduce((s, x) => s + x.amount, 0)),
+      sub: 'leads across all stages' },
+  ]);
+
+  const body = rows.map((l) => `<tr>
+    <td class="txt">${esc(fmt.date(l.joined))}</td>
+    ${emailCell(l.email)}
+    <td class="txt">${clip(l.name, 'm')}</td>
+    <td class="txt">${clip(l.firstSourceName, 's',
+        l.firstSource?.organic ? ' <span class="pill">org</span>' : '')}</td>
+    <td class="txt">${clip(l.lastSourceName, 's')}</td>
+    <td class="txt">${esc(fmt.date(l.lastSourceDate))}</td>
+    <td>${l.income ? fmt.money(l.income) : dash}</td>
+    <td class="txt">${l.stage ? `<span class="pill stage">${esc(l.stage)}</span>` : dash}</td>
+    <td class="txt">${esc(l.consent === 'UNSPECIFIED' ? '—' : l.consent)}</td>
+    <td class="txt">${clip((l.tags || []).join(', '), 'l')}</td>
+  </tr>`).join('');
+
+  $('crmTable').innerHTML = rows.length
+    ? `${headRow(CRM_COLUMNS)}<tbody>${body}</tbody>`
+    : `<tbody><tr><td class="empty">No leads match this filter.</td></tr></tbody>`;
+  $('crmCount').textContent = `${rows.length} leads`;
+  attachCrmSort();
+}
+
+const SALES_COLUMNS = [
+  { key: 'date',        label: 'Date',          txt: true },
+  { key: 'email',       label: 'Lead',          txt: true },
+  { key: 'leadName',    label: 'Name',          txt: true },
+  { key: 'product',     label: 'Product',       txt: true },
+  { key: 'amount',      label: 'Amount' },
+  { key: 'firstSource', label: 'Origin Source', txt: true },
+  { key: 'lastSource',  label: 'Last Source',   txt: true },
+  { key: 'recurring',   label: 'Recurring',     txt: true },
+  { key: 'refunded',    label: 'Refunded',      txt: true },
+];
+
+function renderCrmSales() {
+  const rows = recordRows('sales');
+  if (rows === null) return needsRefresh('Sales');
+
+  const revenue = rows.reduce((s, x) => s + (x.amount || 0), 0);
+  $('crmKpis').innerHTML = kpiTiles([
+    { label: 'Sales in view', value: fmt.int(rows.length) },
+    { label: 'Revenue', value: fmt.money(revenue), cls: revenue ? 'good' : '' },
+    { label: 'AOV', value: fmt.money(rows.length ? revenue / rows.length : null) },
+    { label: 'Refunded', value: fmt.int(rows.filter((x) => x.refunded).length) },
+    { label: 'Recurring', value: fmt.int(rows.filter((x) => x.recurring).length) },
+  ]);
+
+  const body = rows.map((x) => `<tr>
+    <td class="txt">${esc(fmt.datetime(x.date))}</td>
+    ${emailCell(x.email)}
+    <td class="txt">${clip(x.leadName, 'm')}</td>
+    <td class="txt">${clip(x.product, 's')}</td>
+    <td class="good">${fmt.money(x.amount)}</td>
+    <td class="txt">${clip(x.firstSource, 's')}</td>
+    <td class="txt">${clip(x.lastSource, 's')}</td>
+    <td class="txt">${x.recurring ? 'Yes' : dash}</td>
+    <td class="txt">${x.refunded ? '<span class="pill warn">refunded</span>' : dash}</td>
+  </tr>`).join('');
+
+  $('crmTable').innerHTML = rows.length
+    ? `${headRow(SALES_COLUMNS)}<tbody>${body}</tbody>`
+    : `<tbody><tr><td class="empty">No sales in this snapshot window.</td></tr></tbody>`;
+  $('crmCount').textContent = `${rows.length} sales`;
+  attachCrmSort();
+}
+
+const CALLS_COLUMNS = [
+  { key: 'date',        label: 'Date',          txt: true },
+  { key: 'email',       label: 'Lead',          txt: true },
+  { key: 'leadName',    label: 'Name',          txt: true },
+  { key: 'name',        label: 'Call',          txt: true },
+  { key: 'state',       label: 'State',         txt: true },
+  { key: 'firstSource', label: 'Origin Source', txt: true },
+  { key: 'ad',          label: 'Ad',            txt: true },
+  { key: 'lastSource',  label: 'Last Source',   txt: true },
+];
+
+function renderCrmCalls() {
+  const rows = recordRows('calls');
+  if (rows === null) return needsRefresh('Calls');
+
+  const qualified = rows.filter((x) => x.qualified).length;
+  const attributed = rows.filter((x) => x.firstSource || x.lastSource).length;
+  $('crmKpis').innerHTML = kpiTiles([
+    { label: 'Calls in view', value: fmt.int(rows.length) },
+    { label: 'Qualified', value: fmt.int(qualified),
+      sub: rows.length ? `${((qualified / rows.length) * 100).toFixed(0)}% of calls` : '' },
+    { label: 'Attributed', value: fmt.int(attributed), sub: 'call carries a click source' },
+    { label: 'From ads', value: fmt.int(rows.filter((x) => x.ad).length), sub: 'specific ad known' },
+  ]);
+
+  const stateCls = (st) => (st === 'QUALIFIED' ? 'stage' : st === 'NO_SHOW' || st === 'CANCELLED' ? 'warn' : '');
+  const body = rows.map((x) => `<tr>
+    <td class="txt">${esc(fmt.datetime(x.date))}</td>
+    ${emailCell(x.email)}
+    <td class="txt">${clip(x.leadName, 'm')}</td>
+    <td class="txt">${clip(x.name, 's')}</td>
+    <td class="txt">${x.state ? `<span class="pill ${stateCls(x.state)}">${esc(x.state)}</span>` : dash}</td>
+    <td class="txt">${clip(x.firstSource, 's')}</td>
+    <td class="txt">${clip(x.ad, 's')}</td>
+    <td class="txt">${clip(x.lastSource, 's')}</td>
+  </tr>`).join('');
+
+  $('crmTable').innerHTML = rows.length
+    ? `${headRow(CALLS_COLUMNS)}<tbody>${body}</tbody>`
+    : `<tbody><tr><td class="empty">No booked calls in this snapshot window.</td></tr></tbody>`;
+  $('crmCount').textContent = `${rows.length} calls`;
+  attachCrmSort();
+}
+
+const SUBS_COLUMNS = [
+  { key: 'date',        label: 'Start',    txt: true },
+  { key: 'email',       label: 'Lead',     txt: true },
+  { key: 'name',        label: 'Name',     txt: true },
+  { key: 'price',       label: 'Price' },
+  { key: 'periodicity', label: 'Period',   txt: true },
+  { key: 'status',      label: 'Status',   txt: true },
+  { key: 'provider',    label: 'Provider', txt: true },
+];
+
+function renderCrmSubs() {
+  const rows = recordRows('subscriptions');
+  if (rows === null) return needsRefresh('Subscriptions');
+
+  const active = rows.filter((x) => x.status === 'ACTIVE' || x.status === 'TRIALING');
+  $('crmKpis').innerHTML = kpiTiles([
+    { label: 'Subscriptions', value: fmt.int(rows.length) },
+    { label: 'Active / trialing', value: fmt.int(active.length) },
+    { label: 'Canceled', value: fmt.int(rows.filter((x) => x.status === 'CANCELED').length) },
+    { label: 'Active value', value: fmt.money(active.reduce((s, x) => s + (x.price || 0), 0)),
+      sub: 'sum of active plan prices' },
+  ]);
+
+  const body = rows.map((x) => `<tr>
+    <td class="txt">${esc(fmt.date(x.date))}</td>
+    ${emailCell(x.email)}
+    <td class="txt">${clip(x.name, 'm')}</td>
+    <td>${fmt.money(x.price)}</td>
+    <td class="txt">${esc(x.periodicity || '—')}</td>
+    <td class="txt">${x.status ? `<span class="pill ${x.status === 'ACTIVE' ? 'stage' : ''}">${esc(x.status)}</span>` : dash}</td>
+    <td class="txt">${esc(x.provider || '—')}</td>
+  </tr>`).join('');
+
+  $('crmTable').innerHTML = rows.length
+    ? `${headRow(SUBS_COLUMNS)}<tbody>${body}</tbody>`
+    : `<tbody><tr><td class="empty">No subscriptions tracked in this account’s snapshot window —
+       the tab is wired to <code>hyros_get_subscriptions</code> and will populate when they exist.</td></tr></tbody>`;
+  $('crmCount').textContent = `${rows.length} subscriptions`;
+  attachCrmSort();
+}
+
+$('stageFilter').addEventListener('change', (e) => { state.crm.stage = e.target.value; renderCrm(); });
+$('attrFilter').addEventListener('change', (e) => { state.crm.attr = e.target.value; renderCrm(); });
+$('crmSearch').addEventListener('input', (e) => { state.crm.search = e.target.value.toLowerCase(); renderCrm(); });
+
+/* ------------------------------------------------------------------ *
+ * CSV
+ * ------------------------------------------------------------------ */
+
+function toCsv(headers, records) {
+  const cell = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.map(cell).join(','), ...records.map((r) => r.map(cell).join(','))].join('\n');
+}
+
+function download(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+$('exportReport').addEventListener('click', () => {
+  const rows = currentRows() || [];
+  const cols = [{ k: 'name', l: 'Name' }, ...activeCols()];
+  download(`hyros-${state.level}-${state.range}.csv`,
+    toCsv(cols.map((c) => c.l), rows.map((r) => cols.map((c) => c.k === 'name' ? (r.name || r.id) : r[c.k]))));
+});
+
+$('exportCrm').addEventListener('click', () => {
+  const tab = state.crm.tab;
+  const specs = { leads: CRM_COLUMNS, sales: SALES_COLUMNS, calls: CALLS_COLUMNS, subscriptions: SUBS_COLUMNS };
+  const rows = tab === 'leads' ? crmRows() : (recordRows(tab) || []);
+  const cols = specs[tab];
+  download(`hyros-${tab}.csv`,
+    toCsv(cols.map((c) => c.label), rows.map((r) => cols.map((c) => r[c.key]))));
+});
+
+boot();

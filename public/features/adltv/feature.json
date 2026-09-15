@@ -1,0 +1,13 @@
+{
+  "id": "adltv",
+  "name": "Ad LTV",
+  "tab": "Ad LTV",
+  "version": "1.0.0",
+  "description": "Long-term value of the customers each top ad created, followed for 2 months, plus the other sources those customers clicked and which of them closed the most calls.",
+  "mode": "demo",
+  "demo": true,
+  "server": false,
+  "style": true,
+  "needs": ["ranges.30d"],
+  "author": "HYROS"
+}

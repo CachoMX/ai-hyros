@@ -1,0 +1,14 @@
+{
+  "id": "my-feature",
+  "name": "My Feature",
+  "tab": "My Feature",
+  "version": "0.1.0",
+  "description": "One sentence: what question this tab answers.",
+  "mode": "both",
+  "demo": true,
+  "server": true,
+  "style": true,
+  "needs": ["ranges.30d"],
+  "tools": ["hyros_get_attribution_report"],
+  "author": "you"
+}

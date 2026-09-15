@@ -1,0 +1,125 @@
+/**
+ * Local preview: serves public/ and stubs the API.
+ *
+ *   DEV_SETUP_STATE=ready          (default) one connected account, served from data/seed.json
+ *   DEV_SETUP_STATE=needs_storage  the storage gate (no KV)
+ *   DEV_SETUP_STATE=needs_setup    first-load flow: key + password -> harden
+ *
+ * The state machine is in memory so the Playwright harness can walk the whole
+ * first-run flow without Upstash or the HYROS MCP.
+ */
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+
+const ROOT = new URL('../public/', import.meta.url).pathname;
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.gif': 'image/gif', '.woff2': 'font/woff2' };
+
+const dev = {
+  state: process.env.DEV_SETUP_STATE || 'ready',
+  password: process.env.DEV_SETUP_STATE && process.env.DEV_SETUP_STATE !== 'ready' ? null : 'dev',
+  pendingSecrets: process.env.DEV_SETUP_STATE === 'needs_setup',
+  accounts: [],
+};
+if (dev.state === 'ready') {
+  dev.accounts = [
+    { id: 'acc_devprimary0', kind: 'key', label: 'demo@hyros.com', email: 'demo@hyros.com', company: 'Scale Ecom', status: 'APPROVED', keyStatus: 'ok', lastRefresh: '2026-09-14T09:05:00Z' },
+    { id: 'acc_devagency00', kind: 'key', label: 'ops@growthlabs.agency', email: 'ops@growthlabs.agency', company: 'Growth Labs', agency: true, status: 'APPROVED', keyStatus: 'invalid', keyError: 'MCP rejected the API key (HTTP 401)', clientMode: 'arg', clientModeStatus: 'verified', clientsSyncedAt: '2026-09-14T09:00:00Z', lastRefresh: '2026-09-13T09:02:00Z' },
+    { id: 'cli_devclient001', kind: 'client', parentId: 'acc_devagency00', label: 'Bright Peak Fit', email: 'owner@brightpeakfit.com', status: 'APPROVED', keyStatus: 'invalid', keyError: 'MCP rejected the API key (HTTP 401)', lastRefresh: '2026-09-13T09:05:00Z' },
+    { id: 'cli_devclient002', kind: 'client', parentId: 'acc_devagency00', label: 'Lumen & Oak', email: 'hello@lumenandoak.com', status: 'PENDING', keyStatus: 'invalid', lastRefresh: null },
+  ];
+}
+
+const setupState = () => ({
+  ok: true, state: dev.state, storage: dev.state !== 'needs_storage', storeVia: dev.state !== 'needs_storage' ? 'KV_REST_API_URL' : null,
+  passwordSource: dev.password ? 'kv' : null, masterPassword: false, keySecret: dev.password ? (dev.pendingSecrets ? 'kv' : 'env') : null,
+  cronSecret: dev.password ? (dev.pendingSecrets ? 'kv' : 'env') : null, pendingSecrets: dev.pendingSecrets,
+  accounts: dev.accounts.filter((a) => a.kind !== 'client').length, envKey: false, mcpUrl: 'https://mcp.hyros.com/mcp', createdAt: null,
+});
+const authed = (url) => !dev.password || url.searchParams.get('key') === dev.password;
+const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+const readBody = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve({}); } }); });
+
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+
+  if (url.pathname === '/api/setup') {
+    if (req.method === 'GET') {
+      const out = setupState();
+      if (url.searchParams.get('secrets')) {
+        if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
+        out.secrets = dev.pendingSecrets ? { ACCOUNT_KEY_SECRET: 'dev-generated-account-key-secret-0123456789abcdef', CRON_SECRET: 'dev-generated-cron-secret-0123456789abcdef' } : { ACCOUNT_KEY_SECRET: null, CRON_SECRET: null };
+      }
+      return json(res, 200, out);
+    }
+    const body = await readBody(req);
+    if (body.action === 'setup') {
+      if (dev.state === 'needs_storage') return json(res, 503, { ok: false, error: 'needs_storage', message: 'Storage is not set up yet.' });
+      if (dev.password) return json(res, 409, { ok: false, error: 'exists', message: 'This dashboard is already set up.' });
+      if (String(body.password || '').length < 8) return json(res, 400, { ok: false, error: 'weak', message: 'Use at least 8 characters.' });
+      const key = String(body.apiKey || '').trim();
+      if (key === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+      if (key && key.length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
+      dev.accounts = []; dev.password = body.password; dev.pendingSecrets = true; dev.state = 'ready';
+      let added = {};
+      if (key) {
+        const account = { id: `acc_${Buffer.from(key).toString('hex').slice(0, 12).padEnd(12, '0')}`, kind: 'key', label: 'you@yourbrand.test', email: 'you@yourbrand.test', status: 'APPROVED', keyStatus: 'ok', agency: Boolean(body.agency), lastRefresh: null };
+        dev.accounts = [account]; added = { account, clientsFound: 0, clientsApproved: 0 };
+      }
+      return json(res, 200, { ...setupState(), ...added });
+    }
+    if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
+    if (body.action === 'harden') { dev.pendingSecrets = false; return json(res, 200, { ok: true, done: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true }, remaining: { ACCOUNT_KEY_SECRET: false, CRON_SECRET: false }, envSet: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true } }); }
+    if (body.action === 'change-password') { dev.password = body.password; return json(res, 200, setupState()); }
+    if (body.action === 'reset') { dev.accounts = []; dev.password = null; dev.pendingSecrets = false; dev.state = 'needs_setup'; return json(res, 200, { ok: true, deleted: 7, ...setupState() }); }
+    return json(res, 400, { ok: false, error: 'bad_request' });
+  }
+
+  if (url.pathname.startsWith('/api/') && !authed(url)) return json(res, 401, { ok: false, error: dev.password ? 'unauthorized' : 'setup_required' });
+
+  if (url.pathname === '/api/data') {
+    const account = url.searchParams.get('account') || dev.accounts.find((a) => a.kind !== 'client')?.id || null;
+    const acct = dev.accounts.find((a) => a.id === account);
+    if (!acct || !acct.lastRefresh) return json(res, 200, { ok: true, origin: 'none', account, prefs: null, capabilities: { mcpConfigured: Boolean(account), storeConfigured: true }, snapshot: null });
+    const seed = JSON.parse(await readFile(new URL('../data/seed.json', import.meta.url), 'utf8'));
+    seed.origin = 'kv';
+    return json(res, 200, { ok: true, origin: 'kv', account, prefs: null, capabilities: { mcpConfigured: true, storeConfigured: true }, snapshot: seed });
+  }
+  if (url.pathname === '/api/drill') {
+    return json(res, 200, { ok: false, error: 'dev', message: 'Dev server has no MCP — drill-downs need a deployed API. Demo mode drills work.' });
+  }
+  if (url.pathname === '/api/accounts') {
+    if (req.method === 'GET') {
+      return json(res, 200, { ok: true, defaultId: dev.accounts.find((a) => a.kind !== 'client')?.id || null, canAdd: true, accounts: dev.accounts });
+    }
+    if (req.method === 'DELETE') { const id = url.searchParams.get('id'); dev.accounts = dev.accounts.filter((a) => a.id !== id && a.parentId !== id); return json(res, 200, { ok: true }); }
+    const body = await readBody(req);
+    if (body.action === 'replace-key') return json(res, 200, { ok: true, account: dev.accounts.find((a) => a.id === body.id) });
+    if (body.action === 'import-clients') return json(res, 200, { ok: true, added: 0, total: 0, offset: 0, remaining: 0, pending: 0 });
+    if (String(body.apiKey || '').length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
+    if (body.apiKey === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+    const id = `acc_${Buffer.from(body.apiKey).toString('hex').slice(0, 12).padEnd(12, '0')}`;
+    const account = { id, kind: 'key', label: 'you@yourbrand.test', email: 'you@yourbrand.test', status: 'APPROVED', keyStatus: 'ok', agency: Boolean(body.agency), lastRefresh: null };
+    dev.accounts = [...dev.accounts.filter((a) => a.id !== id), account]; dev.state = 'ready';
+    return json(res, 200, { ok: true, account, clientsFound: 0, clientsApproved: 0 });
+  }
+  if (url.pathname === '/api/prefs') return json(res, 200, { ok: true, persisted: false, message: 'Dev server — saved in this browser only.' });
+  if (url.pathname === '/api/refresh') {
+    const account = url.searchParams.get('account') || dev.accounts.find((a) => a.kind !== 'client')?.id;
+    const acct = dev.accounts.find((a) => a.id === account);
+    if (!acct) return json(res, 503, { ok: false, error: 'not_configured', message: 'No HYROS account is connected yet.' });
+    acct.lastRefresh = new Date().toISOString();
+    return json(res, 200, { ok: true, account, persisted: true, ms: 1200, steps: ['dev: served the synthetic seed'], generatedAt: acct.lastRefresh });
+  }
+  if (url.pathname === '/api/health') return json(res, 200, { ok: true, setup: dev.state, dev: true });
+
+  const rel = url.pathname === '/' ? 'index.html' : normalize(url.pathname).replace(/^(\.\.[/\\])+/, '').replace(/^\//, '');
+  try {
+    const buf = await readFile(join(ROOT, rel));
+    res.writeHead(200, { 'content-type': TYPES[extname(rel)] || 'application/octet-stream' });
+    res.end(buf);
+  } catch {
+    res.writeHead(404); res.end('not found');
+  }
+});
+server.listen(4321, () => console.log(`preview on http://127.0.0.1:4321  (DEV_SETUP_STATE=${dev.state})`));

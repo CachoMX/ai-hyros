@@ -1,0 +1,14 @@
+{
+  "id": "scale",
+  "name": "Scale Advisor",
+  "tab": "Scale Advisor",
+  "version": "1.0.0",
+  "description": "Marginal CAC curves per ad account and top ad set (hyros_get_marginal_cac_curve): where the next dollar of daily spend starts costing more than the CAC ceiling.",
+  "mode": "both",
+  "demo": true,
+  "server": true,
+  "style": true,
+  "needs": [],
+  "tools": ["hyros_get_marginal_cac_curve"],
+  "author": "HYROS"
+}

@@ -1,0 +1,41 @@
+/* Ad LTV — feature-scoped styles */
+.ltv-card { padding-bottom: 12px; }
+.ltv-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.ltv-rank {
+  flex: none; width: 34px; height: 34px; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 12px; color: var(--brand);
+  background: var(--lavbg); border: 1px solid rgba(81,80,246,.3);
+  border-radius: 8px; font-variant-numeric: tabular-nums;
+}
+.ltv-title { min-width: 0; flex: 1; }
+.ltv-title b { display: block; font-size: 14.5px; font-weight: 500; }
+.ltv-title .sub { display: block; margin-top: 1px; }
+.ltv-headstats { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.ltv-headstats b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.ltv-steps {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 14px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-tile);
+}
+.ltv-step { display: flex; flex-direction: column; gap: 1px; min-width: 96px; }
+.ltv-step b { font-family: var(--serif); font-weight: 400; font-size: 19px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.ltv-mult {
+  margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--brand);
+  background: var(--lavbg); border: 1px solid rgba(81,80,246,.3);
+  border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums;
+}
+.ltv-assist-head { margin-bottom: 6px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.ltv-assist-head .sub { font-family: var(--sans); text-transform: none; letter-spacing: 0; }
+.ltv-assist {
+  display: grid; grid-template-columns: 180px auto 1fr 42px 110px 120px auto;
+  gap: 10px; align-items: center; padding: 7px 0;
+  border-bottom: 1px solid var(--rule); font-size: 13px;
+}
+.ltv-assist:last-child { border-bottom: 0; }
+.ltv-assist-bar { margin: 0; }
+.ltv-assist-pct { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.ltv-assist-calls { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) {
+  .ltv-assist { grid-template-columns: 1fr auto auto; }
+  .ltv-assist-bar, .ltv-assist .sub { display: none; }
+}

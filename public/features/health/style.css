@@ -1,0 +1,4 @@
+/* Tracking Health — feature-scoped styles */
+.health-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.health-row:last-child { border-bottom: 0; }
+.health-row code { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
