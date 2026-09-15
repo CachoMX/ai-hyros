@@ -12,7 +12,7 @@
  *   - demo() is deterministic (two runs, same JSON) and the block stays small
  *   - server.js build() runs against a fake callTool without throwing, calls
  *     only manifest tools (stub run + callTool('…') literals), keeps per-call
- *     timeouts <= 15 s, and makes zero calls when the budget is spent
+ *     timeouts within ctx.timeouts, and makes zero calls when the budget is spent
  * Folders starting with "_" (the template) are skipped.
  */
 import { readFile, readdir, stat } from 'node:fs/promises';
@@ -22,7 +22,8 @@ import { buildDemoSnapshot } from '../public/demo.js';
 import { fmt, formatCell } from '../public/shared/metrics.js';
 
 const MAX_BLOCK_BYTES = 200 * 1024;   // FEATURES.md block size guideline
-const MAX_CALL_TIMEOUT_MS = 15000;    // FEATURES.md per-call timeout rule
+import { TIMEOUTS } from '../api/_budget.js';
+const MAX_CALL_TIMEOUT_MS = TIMEOUTS.slow;   // FEATURES.md: default lane 15 s, slow lane (ctx.timeouts.slow) 45 s
 
 let failures = 0;
 const check = (name, ok, extra = '') => { console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `  ${extra}`}`); if (!ok) failures += 1; };
@@ -122,7 +123,7 @@ for (const id of FEATURES) {
         id, manifest: m,
         callTool: async (name, args, opts) => { calls.push({ name, opts }); return {}; },
         callToolPaged: async (name, args, opts) => { calls.push({ name, opts }); return []; },
-        snapshot: demoSnap, previous: null, deadline: Date.now() + 20000, timeLeft: () => 20000,
+        snapshot: demoSnap, previous: null, deadline: Date.now() + 60000, timeLeft: () => 60000, timeouts: TIMEOUTS,
         log: () => {}, env: {}, now: new Date(),
       };
       let out = null; let err = null;
@@ -130,7 +131,7 @@ for (const id of FEATURES) {
       check('build(ctx) runs against a stub MCP', !err && out && typeof out === 'object', err?.message);
       const names = calls.map((c) => c.name);
       check('build(ctx) only calls tools the manifest lists', names.every((c) => (m.tools || []).includes(c)), [...new Set(names)].filter((c) => !(m.tools || []).includes(c)).join(','));
-      check('build(ctx) keeps every per-call timeout <= 15 s', calls.every((c) => !c.opts?.timeoutMs || c.opts.timeoutMs <= MAX_CALL_TIMEOUT_MS), JSON.stringify(calls.filter((c) => c.opts?.timeoutMs > MAX_CALL_TIMEOUT_MS)));
+      check('build(ctx) keeps every per-call timeout within ctx.timeouts (<= 45 s slow lane)', calls.every((c) => !c.opts?.timeoutMs || c.opts.timeoutMs <= MAX_CALL_TIMEOUT_MS), JSON.stringify(calls.filter((c) => c.opts?.timeoutMs > MAX_CALL_TIMEOUT_MS)));
       const tightCalls = [];
       const tight = { ...sctx, callTool: async (name) => { tightCalls.push(name); return {}; }, callToolPaged: async (name) => { tightCalls.push(name); return []; }, deadline: Date.now(), timeLeft: () => 0 };
       let tErr = null; let tOut = null;
