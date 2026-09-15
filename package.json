@@ -10,10 +10,5 @@
     "features": "node scripts/feature-check.mjs",
     "seed": "node scripts/make-seed.mjs"
   },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "@upstash/redis": "^1.38.4"
-  }
+  "engines": { "node": ">=20" }
 }
