@@ -1,12 +1,14 @@
 {
   "name": "ai-hyros",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "HYROS Performance Report + CRM clone, driven entirely by the HYROS MCP",
   "scripts": {
     "dev": "vercel dev",
     "check": "node scripts/selftest.mjs && node scripts/store-test.mjs && node scripts/feature-check.mjs && node scripts/pipeline-test.mjs",
+    "test": "npm run check",
     "features": "node scripts/feature-check.mjs",
     "seed": "node scripts/make-seed.mjs"
   },
