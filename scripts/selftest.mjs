@@ -133,6 +133,13 @@ console.log('\nTimezones the API may send (userProfile.timezone is a free string
   check('numeric offset parses to minutes', parseTimezone('-05:00')?.minutes, -300);
   check('IANA parses as iana', parseTimezone('Europe/Madrid')?.kind, 'iana');
   check('30d window is 30 days wide', buildRanges(at, 'UTC')['30d'].start, addDays('2026-09-15', -29));
+
+  const { dayStart, dayEnd } = await import('../api/_dates.js');
+  check('dayStart with a numeric offset', dayStart('2026-09-14', '-05:00'), '2026-09-14T00:00:00-05:00');
+  check('dayEnd with a numeric offset', dayEnd('2026-09-14', '-05:00'), '2026-09-14T23:59:59-05:00');
+  check('dayStart with UTC', dayStart('2026-09-14', 'UTC'), '2026-09-14T00:00:00+00:00');
+  check('dayStart with an IANA zone carries no offset', dayStart('2026-09-14', 'America/New_York'), '2026-09-14T00:00:00');
+  check('dayEnd with an unknown zone carries no offset', dayEnd('2026-09-14', 'Mars/Olympus'), '2026-09-14T23:59:59');
 }
 
 console.log('\nDemo drills (client-side, public/demo.js)');

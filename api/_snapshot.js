@@ -17,7 +17,7 @@
  */
 
 import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
-import { parseTimezone, ymdInTz, addDays } from './_dates.js';
+import { parseTimezone, ymdInTz, addDays, dayStart, dayEnd } from './_dates.js';
 import { runFeatureSteps } from './_features.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
@@ -119,11 +119,11 @@ const MIN_CALL_MS = 1000;
  * caller can record "showing newest N rows" instead of presenting a partial
  * table as complete.
  */
-async function fetchLevel(level, adAccountId, range, settings, { deadline = null, timeoutMs } = {}) {
+async function fetchLevel(level, adAccountId, range, settings, { deadline = null, timeoutMs, tz = 'UTC' } = {}) {
   const request = {
     attributionModel: settings.model,
-    startDate: range.start,
-    endDate: range.end,
+    startDate: dayStart(range.start, tz),
+    endDate: dayEnd(range.end, tz),
     level,
     ids: [adAccountId],
     isAdAccountId: true,
@@ -234,7 +234,7 @@ function canSyncIncrementally({ previous, prevAt, leadsFrom, leadsTo }) {
 /** A previous sync older than this rebuilds the lead set from scratch. */
 const INCREMENTAL_MAX_AGE_DAYS = 7;
 
-async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null }) {
+async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(), deadline = null, tz = 'UTC' }) {
   // Incremental: when the previous snapshot is recent enough, pull only the
   // leads updated since it was built (a lead's lastUpdatedDate moves on
   // creation too, so new joins are included). Sales/calls/subscriptions have
@@ -246,9 +246,11 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
   // The daily cron moves the 30-day window by a day, so windows are compared
   // by overlap, not equality; the pull starts a day before the last real sync.
   const incremental = canSyncIncrementally({ previous, prevAt, leadsFrom, leadsTo });
+  const from = dayStart(leadsFrom, tz);
+  const to = dayEnd(leadsTo, tz);
   const leadsRequest = incremental
-    ? { updatedFromDate: addDays(prevAt, -1), updatedToDate: leadsTo }
-    : { fromDate: leadsFrom, toDate: leadsTo };
+    ? { updatedFromDate: dayStart(addDays(prevAt, -1), tz), updatedToDate: to }
+    : { fromDate: from, toDate: to };
 
   // Every list is capped (4 × 250, subscriptions 2 × 250) and the cap, an
   // expired cursor or the deadline is reported in sync.truncated rather
@@ -256,10 +258,10 @@ async function buildCrm({ leadsFrom, leadsTo, previous = null, now = new Date(),
   const paged = { pageSize: 250, deadline };
   const [leadsPage, salesPage, stagesRaw, callsPage, subsPage] = await Promise.all([
     callToolPagedInfo('hyros_get_leads', { request: leadsRequest }, { ...paged, maxPages: 4 }),
-    callToolPagedInfo('hyros_get_sales', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 4 }),
+    callToolPagedInfo('hyros_get_sales', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
     callToolPaged('hyros_get_stages', { request: {} }, { maxPages: 1, pageSize: 250 }),
-    callToolPagedInfo('hyros_get_calls', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 4 }),
-    callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: leadsFrom, toDate: leadsTo } }, { ...paged, maxPages: 2 }),
+    callToolPagedInfo('hyros_get_calls', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 4 }),
+    callToolPagedInfo('hyros_get_subscriptions', { request: { fromDate: from, toDate: to } }, { ...paged, maxPages: 2 }),
   ]);
   const leadsRaw = leadsPage.rows;
   const salesRaw = salesPage.rows;
@@ -467,7 +469,7 @@ export async function buildSnapshot({
     const key = `${id}:${level}`;
     if (failed.has(key)) return [];
     try {
-      const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline: coreDeadline, timeoutMs: callTimeout() });
+      const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline: coreDeadline, timeoutMs: callTimeout(), tz });
       if (truncated) warn(acct, level, `showing newest ${rows.length} rows${error ? ` (${error})` : ''}`, 'truncated');
       return rows;
     } catch (err) {
@@ -534,7 +536,7 @@ export async function buildSnapshot({
     crm = { ...prevCrm, sync: { ...(prevCrm.sync || {}), stale: true, skipped: 'time budget' } };
     warn(null, null, 'CRM not refreshed: time budget (showing the previous sync)', 'time budget');
   } else {
-    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline });
+    const built = await buildCrm({ leadsFrom: addDays(today, -29), leadsTo: today, previous, now, deadline, tz });
     crm = built.block;
     for (const note of built.notes) warn(null, 'crm', `CRM ${note}`, 'truncated');
   }

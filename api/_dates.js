@@ -76,6 +76,21 @@ export function ymdInTz(date, tz) {
   return shifted.toISOString().slice(0, 10);
 }
 
+/**
+ * Request date params. Every documented example carries a time and offset
+ * ('2021-04-16T20:35:00-05:00') and list filters are worded as strict
+ * bounds, so a bare YYYY-MM-DD may exclude the day itself. Numeric zones
+ * get their offset; IANA names get none (the API then assumes the account
+ * timezone, which is that zone).
+ */
+export function dayStart(ymd, tz) {
+  return `${ymd}T00:00:00${offsetSuffix(tz)}`;
+}
+
+export function dayEnd(ymd, tz) {
+  return `${ymd}T23:59:59${offsetSuffix(tz)}`;
+}
+
 export function addDays(ymd, days) {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);

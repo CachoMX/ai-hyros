@@ -68,6 +68,11 @@ try {
   check('report request carries leadStage', JSON.stringify(report?.leadStage) === '["Customer"]');
   check('report request uses newestFirst', report?.newestFirst === true);
   check('snapshot records settings', snap.settings.windowDays === 14 && snap.settings.leadStage[0] === 'Customer');
+  check('attribution dates are ISO datetimes with the account offset (docs example 2021-04-16T20:35:00-05:00)', report?.startDate === '2026-09-14T00:00:00-05:00' && report?.endDate === '2026-09-14T23:59:59-05:00', JSON.stringify([report?.startDate, report?.endDate]));
+  const leadsFull = calls.find((c) => c.name === 'hyros_get_leads')?.args.request;
+  const salesFull = calls.find((c) => c.name === 'hyros_get_sales')?.args.request;
+  check('CRM fromDate/toDate carry time + offset too', leadsFull?.fromDate === '2026-08-16T00:00:00-05:00' && leadsFull?.toDate === '2026-09-14T23:59:59-05:00' && salesFull?.fromDate === '2026-08-16T00:00:00-05:00', JSON.stringify([leadsFull, salesFull]));
+  check('snapshot ranges and CRM window stay YYYY-MM-DD', snap.ranges.today.start === '2026-09-14' && snap.ranges['30d'].start === '2026-08-16' && snap.crm.window.from === '2026-08-16' && snap.crm.window.to === '2026-09-14', JSON.stringify([snap.ranges.today, snap.crm.window]));
 
   const ads = snap.ranges['30d'].levels.ad;
   check('ad rows keep parentId', ads.every((a) => a.parentId), JSON.stringify(ads.map((a) => a.parentId)));
@@ -178,8 +183,11 @@ try {
 
   console.log('\nAccount timezone: IANA names work, nonsense is warned about, never silent UTC');
   mock.timezone = 'America/New_York';
+  calls.length = 0;
   const snapNy = await buildSnapshot({ now: new Date('2026-09-14T02:30:00Z'), prefs });
   check('IANA timezone builds the ranges on the local day (22:30 the day before in New York)', snapNy.ranges.today.start === '2026-09-13' && snapNy.account.timezone === 'America/New_York' && !snapNy.warnings.some((w) => /timezone/.test(w.error)), JSON.stringify([snapNy.ranges.today.start, snapNy.warnings]));
+  const nyReport = calls.find((c) => c.name === 'hyros_get_attribution_report')?.args.request;
+  check('IANA timezone: date params carry the local time and no offset (the API assumes the account zone)', nyReport?.startDate === '2026-09-13T00:00:00' && nyReport?.endDate === '2026-09-13T23:59:59', JSON.stringify([nyReport?.startDate, nyReport?.endDate]));
   mock.timezone = 'Mars/Olympus';
   const snapMars = await buildSnapshot({ now: new Date('2026-09-14T02:30:00Z'), prefs });
   check('unknown timezone: UTC ranges + a kind error warning naming it', snapMars.ranges.today.start === '2026-09-14' && snapMars.warnings.some((w) => w.kind === 'error' && /timezone Mars\/Olympus not understood, using UTC/.test(w.error)), JSON.stringify(snapMars.warnings));
