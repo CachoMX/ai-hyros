@@ -6,12 +6,21 @@
  */
 import { TEMPLATE_VERSION } from './_version.js';
 
-const REDACT = /(api[-_ ]?key|password|secret|token|bearer)\s*[:=]\s*\S+/gi;
+// Anything that looks like a credential, however it is phrased: the keyword
+// ("key" alone included), optionally "is" / "was", a few separator
+// characters, then the value. Long opaque blobs (tokens, JWTs, hex secrets)
+// are caught on their own as well, wherever they appear.
+const REDACT = /\b(api[-_ ]?key|key|password|passwd|secret|token|bearer|authorization)\b(?:\s+(?:is|was))?[\s:="']{0,4}\S{4,}/gi;
+const OPAQUE = /\b[A-Za-z0-9_-]{32,}\b/g;
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+const scrub = (v) => (typeof v === 'string'
+  ? v.replace(REDACT, '$1=<redacted>').replace(OPAQUE, '<redacted>').replace(EMAIL, '<email>').slice(0, 500)
+  : v);
 
 export function logEvent(evt, fields = {}) {
   try {
-    const clean = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k,
-      typeof v === 'string' ? v.replace(REDACT, '$1=<redacted>').slice(0, 500) : v]));
+    const clean = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, scrub(v)]));
     console.error(JSON.stringify({ evt, at: new Date().toISOString(), templateVersion: TEMPLATE_VERSION, ...clean }));
   } catch { /* logging must never throw */ }
 }
