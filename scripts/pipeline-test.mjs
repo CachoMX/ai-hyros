@@ -113,6 +113,19 @@ try {
   check('rate-limited account is retried on the next range, not blacklisted', levelsFor('9001').length === 10 && snapRl.ranges['30d'].levels.account.some((r) => r.id === '9001'), String(levelsFor('9001').length));
   mock.reset();
 
+  console.log('\nAttribution rows are paginated (docs: pageSize 1-250, nextPageId)');
+  mock.adAccounts = [{ id: '9001', name: 'Mock Meta', type: 'FACEBOOK' }];
+  mock.pages('hyros_get_attribution_report', 3, 250);
+  calls.length = 0;
+  const snapPg = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
+  check('3 pages -> 750 ad-set rows per range, nothing truncated', snapPg.ranges['30d'].levels.adset.length === 750 && !snapPg.warnings.some((w) => w.kind === 'truncated'), `${snapPg.ranges['30d'].levels.adset.length} ${JSON.stringify(snapPg.warnings)}`);
+  check('pages requested with the previous nextPageId', calls.filter((c) => c.name === 'hyros_get_attribution_report' && c.args.request.pageId).length === 4 * 2 * 2, String(calls.filter((c) => c.name === 'hyros_get_attribution_report' && c.args.request.pageId).length));
+  mock.pages('hyros_get_attribution_report', 10, 250);
+  const snapCap = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
+  const capWarn = snapCap.warnings.find((w) => w.kind === 'truncated' && w.level === 'FACEBOOK_ADSET');
+  check('past the page cap: newest rows kept + kind truncated warning', snapCap.ranges['30d'].levels.adset.length === 2000 && /showing newest 2000 rows/.test(capWarn?.error || ''), `${snapCap.ranges['30d'].levels.adset.length} ${JSON.stringify(capWarn)}`);
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });

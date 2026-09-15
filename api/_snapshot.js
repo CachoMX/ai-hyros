@@ -16,7 +16,7 @@
  * report's Campaign tab exactly.
  */
 
-import { callTool, callToolPaged } from './_mcp.js';
+import { callTool, callToolPaged, callToolPagedInfo } from './_mcp.js';
 import { runFeatureSteps } from './_features.js';
 import { CATALOG, derive, aggregate, rollup } from '../public/shared/metrics.js';
 
@@ -121,7 +121,16 @@ export function normalizeSettings(raw = {}) {
   return { model, windowDays, leadStage };
 }
 
-async function fetchLevel(level, adAccountId, range, settings) {
+/** Attribution rows per level per range: 8 pages × 250 before the newest-N warning. */
+const ATTRIBUTION_MAX_PAGES = 8;
+
+/**
+ * One level of one ad account for one range, paged to completion (or to the
+ * page cap / the deadline). Returns { rows, truncated, error? } so the
+ * caller can record "showing newest N rows" instead of presenting a partial
+ * table as complete.
+ */
+async function fetchLevel(level, adAccountId, range, settings, { deadline = null, timeoutMs } = {}) {
   const request = {
     attributionModel: settings.model,
     startDate: range.start,
@@ -145,9 +154,9 @@ async function fetchLevel(level, adAccountId, range, settings) {
   // Funnel-outcome ranking: narrow leads/sales/revenue to leads in these stages.
   if (settings.leadStage.length) request.leadStage = settings.leadStage;
 
-  const body = await callTool('hyros_get_attribution_report', { request });
-  const rows = Array.isArray(body) ? body : body?.result || [];
-  return rows.map(normalizeRow);
+  const page = await callToolPagedInfo('hyros_get_attribution_report', { request },
+    { maxPages: ATTRIBUTION_MAX_PAGES, pageSize: 250, deadline, timeoutMs });
+  return { ...page, rows: page.rows.map(normalizeRow) };
 }
 
 /* ---------------- level assembly ---------------- */
@@ -421,8 +430,9 @@ export async function buildSnapshot({
     const key = `${id}:${level}`;
     if (failed.has(key)) return [];
     try {
-      const rows = await fetchLevel(level, id, range, settings);
+      const { rows, truncated, error } = await fetchLevel(level, id, range, settings, { deadline });
       reported.add(id);
+      if (truncated) warn(acct, level, `showing newest ${rows.length} rows${error ? ` (${error})` : ''}`, 'truncated');
       return rows;
     } catch (err) {
       if (err?.name === 'McpNotConfigured' || err?.code === 'auth') throw err;
