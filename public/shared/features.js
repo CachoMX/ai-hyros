@@ -30,7 +30,10 @@ export function validateManifest(m, id) {
   if (!/^\d+\.\d+\.\d+$/.test(String(m.version))) problems.push('version must be semver (x.y.z)');
   if (!['demo', 'live', 'both'].includes(m.mode)) problems.push('mode must be demo | live | both');
   if (m.mode !== 'live' && !m.demo) problems.push('mode demo/both requires "demo": true (a demo.js)');
-  if (m.mode !== 'demo' && !m.server && !(m.needs || []).length) problems.push('mode live/both needs a server step or "needs" blocks that the core snapshot provides');
+  // A tab shows only when snapshot[id] exists (app.js featureVisible); on real
+  // accounts only server.js produces it, so live/both without a server step
+  // is a tab that can never appear. `needs` only hides, it never shows.
+  if (m.mode !== 'demo' && !m.server) problems.push('mode live/both requires "server": true (the tab only shows when snapshot[id] exists, and only server.js produces it on real accounts)');
   for (const k of ['demo', 'server', 'style']) if (m[k] !== undefined && typeof m[k] !== 'boolean') problems.push(`${k} must be boolean`);
   if (m.needs !== undefined && !Array.isArray(m.needs)) problems.push('needs must be an array of snapshot paths');
   return problems;

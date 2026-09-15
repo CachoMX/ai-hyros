@@ -4,7 +4,15 @@ const KIND_LABEL = { email: 'email', organic: 'organic', ads: 'paid' };
 export function render(ctx) {
   const { fmt, esc, kpis } = ctx;
   const d = ctx.block;
-  if (!d || !d.rows?.length) { ctx.root.innerHTML = '<div class="fpanel"><div class="empty">No Ad LTV data in this snapshot.</div></div>'; return; }
+  // Demo-only feature: a block without rows ({ error }, { skipped }, {}) renders a status, never throws.
+  if (!d || typeof d !== 'object' || !Array.isArray(d.rows) || !d.rows.length || !Array.isArray(d.callLeaders)) {
+    const why = d?.error ? `Error: ${esc(d.error)}`
+      : d?.skipped ? `Skipped this refresh (${esc(d.skipped)}).`
+        : 'No Ad LTV data in this snapshot.';
+    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${why}</div></div>`;
+    return;
+  }
+  const status = d.stale && d.skipped ? `<br><b>Showing the previous result</b> — skipped this refresh: ${esc(d.skipped)}.` : '';
 
   const topAd = [...d.rows].sort((a, b) => b.ltv60 - a.ltv60)[0];
   const avgMult = d.rows.reduce((s, r) => s + (r.mult || 0), 0) / d.rows.length;
@@ -52,16 +60,16 @@ export function render(ctx) {
   ctx.root.innerHTML = `
     <div class="note"><b>Demo feature.</b> Long-term value of the customers each top ad created,
       followed for 2 months after the click — plus the other traffic sources those same customers
-      clicked along the way, and which of them closed the most calls. Window: ${esc(d.window.start)} → ${esc(d.window.end)}.</div>
+      clicked along the way, and which of them closed the most calls. Window: ${esc(d.window?.start)} → ${esc(d.window?.end)}.${status}</div>
     <div class="kpis">${kpis([
-      { label: 'Highest 60-day LTV', value: fmt.money(topAd.ltv60), cls: 'good', sub: topAd.name },
+      { label: 'Highest 60-day LTV', value: fmt.money(topAd.ltv60), cls: 'good', sub: esc(topAd.name) },
       { label: 'Avg LTV growth (60d)', value: `${avgMult.toFixed(2)}×`, sub: 'vs first-purchase AOV, top 5 ads' },
       { label: 'Customers followed', value: fmt.int(totCustomers), sub: 'created by the top 5 ads' },
       { label: 'Closed calls via assists', value: fmt.int(totAssistCalls), sub: 'booked & closed through other sources' },
     ])}</div>
     ${cards}
     <div class="fpanel"><h3>Closed calls by assisting source</h3>
-      <div class="fhint">across all customers of the top 5 ads, ${esc(d.window.start)} → ${esc(d.window.end)}</div>
+      <div class="fhint">across all customers of the top 5 ads, ${esc(d.window?.start)} → ${esc(d.window?.end)}</div>
       ${d.callLeaders.map((x, i) => `
         <div class="fshare">
           <div class="fshare-head">
