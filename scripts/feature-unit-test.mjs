@@ -367,6 +367,12 @@ console.log('\nTracking Health: view says what each check did');
 
   const legacy = render({ ...base, scripts: { 'https://a.test/': 'SCRIPT_FOUND' }, errors: ['params SEARCH: skipped (time budget)'] });
   check('block from before `checks` existed still renders with sensible tiles', !legacy.err && tile(legacy.c, 'Script present').value === '1 / 1', legacy.err?.message || JSON.stringify(tile(legacy.c, 'Script present')));
+
+  const demoBlock = healthDemo(snap);
+  const d = render(demoBlock, snap);
+  check('demo block carries checks (all ok) and renders "2 / 3" scripts present', ['domains', 'script', 'params'].every((k) => demoBlock.checks?.[k]?.status === 'ok') && !d.err && tile(d.c, 'Script present').value === '2 / 3', d.err?.message || JSON.stringify(demoBlock.checks));
+  check('demo block is deterministic (no clock beyond today\'s date)', JSON.stringify(healthDemo(snap)) === JSON.stringify(demoBlock) && /T08:00:00\.000Z$/.test(demoBlock.checkedAt), demoBlock.checkedAt);
+  check('demo block shows no skip/fail wording and no errors panel', !/Skipped this refresh|Check failed|<h3>Check errors<\/h3>/.test(d.html));
 }
 
 // ---------------------------------------------------------------------------
