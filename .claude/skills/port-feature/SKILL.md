@@ -9,7 +9,9 @@ description: Bring a feature into this AI HYROS app from a zip or from another f
 `node scripts/feature-pack.mjs --install <zip>` — unzips into
 `public/features/<id>/`, registers the id, runs the conformance check.
 Read the feature's `SPEC.md`; if its `needs` or `tools` reference something
-this fork lacks (check `FINDINGS.md`), say so before enabling it.
+this fork lacks (check `FINDINGS.md`, updated 2026-09-15 against
+api-docs.hyros.com; when in doubt the official docs win:
+https://api-docs.hyros.com/llms.txt), say so before enabling it.
 
 **Export:** `node scripts/feature-pack.mjs <id>` → `dist/features/<id>-<version>.zip`.
 The zip is the folder alone; nothing outside it is needed.

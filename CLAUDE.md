@@ -14,9 +14,11 @@ way.
    change; never invent colors or fonts.
 3. `README.md` — architecture (MCP → snapshot → KV → static page), setup
    flow, files.
-4. `FINDINGS.md` — what the HYROS MCP can and cannot do. Read before
-   designing a live data feature; it tells you which questions are
-   answerable with today's tools.
+4. `FINDINGS.md` — what the HYROS MCP can and cannot do (updated
+   2026-09-15 against api-docs.hyros.com; when in doubt the official docs
+   win: https://api-docs.hyros.com/llms.txt). Read before designing a live
+   data feature; it tells you which questions are answerable with today's
+   tools.
 5. `public/features/scale/` and `public/features/health/` — worked examples
    of a live feature (server step + demo + view + spec);
    `public/features/funnel/` and `adltv/` — demo-only examples;
