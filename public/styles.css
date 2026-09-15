@@ -673,6 +673,8 @@ button.drill.clip { text-align: left; }
 .setup-body input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(81,80,246,.16); }
 .setup-body .acct-check { display: flex; gap: 8px; align-items: center; margin: 2px 0 14px; font-size: 13px; color: var(--ink-2); }
 .setup-label { display: block; margin: 4px 0 6px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+/* the one-line prerequisite under the key field: quiet body text, not a label */
+.setup-body p.setup-hint { margin: 6px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
 .setup-guide { margin: 0 0 18px; padding-left: 20px; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
 .setup-guide li { margin-bottom: 6px; }
 .setup-guide b { color: var(--ink); font-weight: 500; }
