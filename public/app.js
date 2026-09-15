@@ -109,8 +109,49 @@ async function api(path, opts = {}) {
   }
   const res = await fetch(url, opts);
   if (res.status === 401) throw new Error('unauthorized');
-  return { status: res.status, body: await res.json() };
+  try {
+    return { status: res.status, body: await res.json() };
+  } catch {
+    // Not JSON: Vercel's own error page when the function was killed (60 s)
+    // or a 5xx. Carry a code so the copy can say what to do.
+    throw Object.assign(new Error(`HTTP ${res.status} — the server did not answer with JSON`),
+      { code: res.status >= 500 ? 'timeout' : 'bad_response' });
+  }
 }
+
+/* ---------- failure copy: what to DO for each error code ---------- */
+
+const KEY_COPY = 'HYROS rejected that key — copy it again from HYROS → Settings → API.';
+const FAILURE_COPY = {
+  auth: KEY_COPY,
+  bad_key: KEY_COPY,
+  key_invalid: KEY_COPY,
+  forbidden: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).',
+  rate_limited: 'HYROS is rate-limiting this account; wait a minute and press Refresh.',
+  timeout: 'The build ran out of time (large account). Press Refresh again — the refresh is incremental.',
+  NOT_CONFIGURED: 'No HYROS API key is available for this account — check that storage is set up and add the account again from the account menu.',
+  not_configured: 'No HYROS account is connected yet — add one from the account menu.',
+  needs_storage: 'Storage is not set up yet — add the Upstash Redis store first (see the banner).',
+};
+/* Messages that mean "the function ran out of time / never answered", whatever the code. */
+const TIMEOUT_TEXT = /timed out|Failed to fetch|NetworkError|Unexpected token|did not answer with JSON|HTTP 5\d\d|FUNCTION_INVOCATION|<!doctype|<html/i;
+
+/**
+ * Actionable text for a failed API answer or a thrown error. Prefers the
+ * server's `code` (the MCP error code), then its `error`, then the message
+ * shape; falls back to the raw message. Plain text — callers escape it.
+ */
+function failureCopy(src, fallback = 'Unknown error') {
+  const code = src?.code || src?.error || '';
+  if (FAILURE_COPY[code]) return FAILURE_COPY[code];
+  const message = String(src?.message || fallback || '');
+  if (TIMEOUT_TEXT.test(message)) return FAILURE_COPY.timeout;
+  return message || fallback;
+}
+
+/** A key that HYROS rejected can be replaced in place — say so next to the copy. */
+const isKeyFailure = (src) => ['auth', 'bad_key', 'key_invalid'].includes(src?.code || src?.error || '');
+const replaceKeyHint = ' Open the account selector and use <b>Replace key</b>.';
 
 /** Placeholder snapshot for an account that has no build yet. */
 function emptySnapshot() {
@@ -287,8 +328,8 @@ $('setupDemo').addEventListener('click', () => hideSetup());
 // First run: HYROS key + dashboard password in one step (the key is optional)
 async function runFirstSetup({ apiKey, agency, password }) {
   const res = await fetch(`${location.origin}/api/setup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'setup', password, apiKey, agency }) });
-  const body = await res.json();
-  if (!body.ok) throw new Error(body.message || body.error);
+  const body = await res.json().catch(() => ({ ok: false, code: res.status >= 500 ? 'timeout' : 'bad_response', message: `HTTP ${res.status}` }));
+  if (!body.ok) throw new Error(failureCopy(body));
   state.key = password;
   sessionStorage.setItem('aihyros_key', password);
   sessionStorage.setItem('aihyros_demo', '');
@@ -311,7 +352,7 @@ $('setupConnectForm').addEventListener('submit', async (e) => {
   if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
   btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
   try { await runFirstSetup({ apiKey, agency: $('setupAgency').checked, password: p1 }); $('setupKey').value = ''; }
-  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
   finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
 });
 $('setupSkipKey').addEventListener('click', async () => {
@@ -321,7 +362,7 @@ $('setupSkipKey').addEventListener('click', async () => {
   if (p1.length < 8) { err.hidden = false; err.textContent = 'Choose the dashboard password first (8+ characters).'; return; }
   if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
   try { await runFirstSetup({ apiKey: '', agency: false, password: p1 }); }
-  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
 });
 
 // Connect a key later (banner / account menu), once signed in
@@ -333,7 +374,7 @@ $('setupKeyForm').addEventListener('submit', async (e) => {
   btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
   try {
     const { body } = await api('/api/accounts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey, agency: $('setupAgency2').checked }) });
-    if (!body.ok) { err.hidden = false; err.textContent = body.message || body.error; return; }
+    if (!body.ok) { err.hidden = false; err.textContent = failureCopy(body); return; }
     $('setupKey2').value = '';
     sessionStorage.setItem('aihyros_demo', '');
     state.account = body.account.id;
@@ -343,7 +384,7 @@ $('setupKeyForm').addEventListener('submit', async (e) => {
     await start();
     if (body.clientsFound > 0 && body.clientsApproved > 0) await importAgencyClients(body.account.id, body.account.label);
     if (state.setup?.pendingSecrets) showSetup('harden', { overlay: true });
-  } catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  } catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
   finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
 });
 $('setupSkipKey2').addEventListener('click', () => hideSetup());
@@ -748,8 +789,7 @@ async function firstBuild() {
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
     if (!body.ok) {
-      const hint = body.error === 'key_invalid' ? ' Open the account selector and use <b>Replace key</b>.' : '';
-      note(`First build failed: ${esc(body.message || body.error)}${hint}`, true);
+      note(`First build failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
       await loadAccounts();
       return;
     }
@@ -759,7 +799,7 @@ async function firstBuild() {
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
     note(`Built in ${(body.ms / 1000).toFixed(1)}s.` + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
   } catch (err) {
-    note(`First build failed: ${esc(err.message)}`, true);
+    note(`First build failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = state.demo; btn.textContent = 'Refresh';
   }
@@ -819,7 +859,7 @@ $('acctForm').addEventListener('submit', async (e) => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(replaceId ? { action: 'replace-key', id: replaceId, apiKey } : { apiKey, agency }),
     });
-    if (!body.ok) { $('acctStatus').className = 'sub err'; $('acctStatus').textContent = body.message || body.error; return; }
+    if (!body.ok) { $('acctStatus').className = 'sub err'; $('acctStatus').textContent = failureCopy(body); return; }
     $('acctKey').value = '';
     await loadAccounts();
     if (replaceId) {
@@ -839,7 +879,7 @@ $('acctForm').addEventListener('submit', async (e) => {
     await refreshSetupState(); renderSetupBanner();
     switchAccount(account.id);
   } catch (err) {
-    $('acctStatus').className = 'sub err'; $('acctStatus').textContent = err.message;
+    $('acctStatus').className = 'sub err'; $('acctStatus').textContent = failureCopy(err);
   } finally { btn.disabled = false; }
 });
 
@@ -1045,10 +1085,10 @@ $('refreshBtn').addEventListener('click', async () => {
       note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.`
         + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
     } else {
-      note(`Refresh failed: ${esc(body.message || body.error)}`, true);
+      note(`Refresh failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
     }
   } catch (err) {
-    note(`Refresh failed: ${esc(err.message)}`, true);
+    note(`Refresh failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Refresh';
@@ -1274,7 +1314,7 @@ function renderCrumbs() {
 function renderRangeChips() {
   const ranges = state.snapshot.ranges || {};
   const title = (r) => (r.skipped ? `Not fetched this refresh (${r.skipped}) — press Refresh again`
-    : r.unavailable ? 'Not in the baked seed snapshot — Refresh with live credentials'
+    : r.unavailable ? 'Not in this snapshot yet — press Refresh'
       : `${r.start} → ${r.end}`);
   $('rangeChips').innerHTML = Object.entries(ranges).map(([key, r]) => `
     <button class="chip ${key === state.range ? 'active' : ''}"
@@ -1339,8 +1379,9 @@ function renderReport() {
     $('reportKpis').innerHTML = '';
     $('reportTable').innerHTML = `<tbody><tr><td class="empty">${block?.skipped
       ? `This range was not fetched this refresh (${esc(block.skipped)}).<br>Press <b>Refresh</b> again — the refresh is incremental.`
-      : `This range is not in the baked seed snapshot.<br>
-       Set <code>HYROS_MCP_URL</code> + <code>HYROS_API_KEY</code> and hit Refresh to load it live.`}</td></tr></tbody>`;
+      : state.origin === 'none'
+        ? 'The first snapshot has not been built yet.'
+        : 'No data for this range yet — press <b>Refresh</b>.'}</td></tr></tbody>`;
     $('reportCount').textContent = '';
     updateHProxy();
     return;

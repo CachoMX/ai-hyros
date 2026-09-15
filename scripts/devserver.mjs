@@ -60,7 +60,9 @@ const server = createServer(async (req, res) => {
       if (dev.password) return json(res, 409, { ok: false, error: 'exists', message: 'This dashboard is already set up.' });
       if (String(body.password || '').length < 8) return json(res, 400, { ok: false, error: 'weak', message: 'Use at least 8 characters.' });
       const key = String(body.apiKey || '').trim();
-      if (key === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+      // Same body shape as api/setup.js errorBody(): error (legacy), code (the MCP error code), message, detail.
+      if (key === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', code: 'auth', message: 'HYROS rejected that key — copy it again from HYROS → Settings → API.', detail: 'MCP rejected the API key (HTTP 401)' });
+      if (key === 'mcp-off-key-000') return json(res, 403, { ok: false, error: 'bad_key', code: 'forbidden', message: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).', detail: 'hyros_get_user_info: MCP is not enabled for this account' });
       if (key && key.length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
       dev.accounts = []; dev.password = body.password; dev.pendingSecrets = true; dev.state = 'ready';
       let added = {};
@@ -99,7 +101,8 @@ const server = createServer(async (req, res) => {
     if (body.action === 'replace-key') return json(res, 200, { ok: true, account: dev.accounts.find((a) => a.id === body.id) });
     if (body.action === 'import-clients') return json(res, 200, { ok: true, added: 0, total: 0, offset: 0, remaining: 0, pending: 0 });
     if (String(body.apiKey || '').length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
-    if (body.apiKey === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+    if (body.apiKey === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', code: 'auth', message: 'HYROS rejected that key — copy it again from HYROS → Settings → API.', detail: 'MCP rejected the API key (HTTP 401)' });
+    if (body.apiKey === 'mcp-off-key-000') return json(res, 403, { ok: false, error: 'bad_key', code: 'forbidden', message: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).', detail: 'hyros_get_user_info: MCP is not enabled for this account' });
     const id = `acc_${Buffer.from(body.apiKey).toString('hex').slice(0, 12).padEnd(12, '0')}`;
     const account = { id, kind: 'key', label: 'you@yourbrand.test', email: 'you@yourbrand.test', status: 'APPROVED', keyStatus: 'ok', agency: Boolean(body.agency), lastRefresh: null };
     dev.accounts = [...dev.accounts.filter((a) => a.id !== id), account]; dev.state = 'ready';

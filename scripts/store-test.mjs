@@ -45,5 +45,30 @@ await withEnv({}, (m) => check('nothing configured', m.storeCredentials(), null)
 await withEnv({ KV_REST_API_URL: 'u5', KV_REST_API_TOKEN: 't5', STORAGE_REST_API_URL: 'x', STORAGE_REST_API_TOKEN: 'y' },
   (m) => check('canonical wins over prefixed', m.storeCredentials()?.via, 'KV_REST_API_URL'));
 
-console.log(fails ? `\n${fails} FAILURE(S)\n` : '\nAll credential cases pass.\n');
+/* ------------------------------------------------------------------ *
+ * API route contracts (setup / health / data) — pure helpers and handlers
+ * driven with fake req/res objects. No store, no MCP needed unless noted.
+ * ------------------------------------------------------------------ */
+console.log('\nAPI route contracts');
+const ok = (name, cond, extra = '') => check(name, Boolean(cond), true) || (cond ? null : console.log(`        ${extra}`));
+
+{
+  const { errorBody } = await import('../api/setup.js');
+  const mcp = (code, message = 'boom') => Object.assign(new Error(message), { name: 'McpError', code });
+  const auth = errorBody(mcp('auth', 'MCP rejected the API key (HTTP 401)'));
+  ok('setup error: auth keeps error=bad_key and carries code=auth', auth.ok === false && auth.error === 'bad_key' && auth.code === 'auth', JSON.stringify(auth));
+  ok('setup error: auth message tells the user to re-copy the key', /Settings → API/.test(auth.message), auth.message);
+  const forb = errorBody(mcp('forbidden', 'Missing role'));
+  ok('setup error: forbidden is not "bad key" — points at HYROS support', forb.code === 'forbidden' && /HYROS support/.test(forb.message) && !/rejected that key/.test(forb.message), JSON.stringify(forb));
+  const rl = errorBody(mcp('rate_limited', 'request limit'));
+  ok('setup error: rate_limited says wait and retry', rl.code === 'rate_limited' && /wait/.test(rl.message), JSON.stringify(rl));
+  const nc = errorBody(Object.assign(new Error('No HYROS API key is available for this account'), { name: 'McpNotConfigured', code: 'NOT_CONFIGURED' }));
+  ok('setup error: NOT_CONFIGURED travels as its own code', nc.code === 'NOT_CONFIGURED' && nc.error === 'NOT_CONFIGURED', JSON.stringify(nc));
+  const raw = errorBody(mcp(undefined, 'hyros_get_user_info: MCP is not enabled for this account'));
+  ok('setup error: an MCP error without a code keeps the server text as detail', raw.error === 'bad_key' && raw.detail === 'hyros_get_user_info: MCP is not enabled for this account', JSON.stringify(raw));
+  const weak = errorBody(Object.assign(new Error('Use at least 8 characters.'), { status: 400, code: 'weak' }));
+  ok('setup error: plain coded errors pass through unchanged', weak.error === 'weak' && weak.code === 'weak' && weak.message === 'Use at least 8 characters.', JSON.stringify(weak));
+}
+
+console.log(fails ? `\n${fails} FAILURE(S)\n` : '\nAll store + API contract checks pass.\n');
 process.exit(fails ? 1 : 0);
