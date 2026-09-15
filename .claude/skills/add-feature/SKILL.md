@@ -13,8 +13,10 @@ Read `FEATURES.md` and `CLAUDE.md` first; look at `public/features/scale/`
    `name`, `tab`, `description`, `mode`, `demo`, `server`, `style`,
    `needs`, `tools` in `feature.json`.
 2. Write `SPEC.md` — purpose, data (which MCP tools, limits), block shape
-   as JSON, rules, porting notes, open limitations. Check `FINDINGS.md` to
-   confirm the MCP can answer the question before promising a live mode.
+   as JSON, rules, porting notes, open limitations. Check `FINDINGS.md`
+   (updated 2026-09-15 against api-docs.hyros.com; when in doubt the
+   official docs win: https://api-docs.hyros.com/llms.txt) to confirm the
+   MCP can answer the question before promising a live mode.
 3. `demo.js`: produce the block from the demo snapshot with the seeded
    `rng` (never `Math.random`). Numbers must reconcile with the report.
 4. `view.js`: `render(ctx)` builds HTML into `ctx.root.innerHTML` using
