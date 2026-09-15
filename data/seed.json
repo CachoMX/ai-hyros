@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAt": "2026-09-15T16:41:33.432Z",
+  "generatedAt": "2026-09-15T20:10:06.640Z",
   "origin": "seed",
   "attributionModel": "LAST_CLICK",
   "settings": {
@@ -17738,9 +17738,9 @@
         "id": "sarah.mitchell@wildbloomskin.com",
         "email": "sarah.mitchell@wildbloomskin.com",
         "name": "sarah mitchell",
-        "joined": "2026-09-08T16:41:33.432Z",
+        "joined": "2026-09-08T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-08T16:41:33.432Z",
+        "stageDate": "2026-09-08T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17752,16 +17752,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-08T16:41:33.432Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-08T16:41:33.432Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-08T16:41:33.432Z",
+        "lastSourceDate": "2026-09-08T20:10:06.640Z",
         "income": 349,
         "hasAttribution": true
       },
@@ -17769,9 +17769,9 @@
         "id": "mike.silva@nordicstride.co",
         "email": "mike.silva@nordicstride.co",
         "name": "mike silva",
-        "joined": "2026-08-25T16:41:33.433Z",
+        "joined": "2026-08-25T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-25T16:41:33.433Z",
+        "stageDate": "2026-08-25T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17783,16 +17783,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-25T16:41:33.433Z",
+        "lastSourceDate": "2026-08-25T20:10:06.640Z",
         "income": 89,
         "hasAttribution": true
       },
@@ -17800,9 +17800,9 @@
         "id": "jenna.reed@brightpeakfit.com",
         "email": "jenna.reed@brightpeakfit.com",
         "name": "jenna reed",
-        "joined": "2026-09-10T16:41:33.433Z",
+        "joined": "2026-09-10T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-09-10T16:41:33.433Z",
+        "stageDate": "2026-09-10T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17814,16 +17814,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-10T16:41:33.433Z",
+        "lastSourceDate": "2026-09-10T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -17831,9 +17831,9 @@
         "id": "carlos.romano@lumenandoak.com",
         "email": "carlos.romano@lumenandoak.com",
         "name": "carlos romano",
-        "joined": "2026-09-02T16:41:33.433Z",
+        "joined": "2026-09-02T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-02T16:41:33.433Z",
+        "stageDate": "2026-09-02T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17845,16 +17845,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-02T16:41:33.433Z"
+          "clickDate": "2026-09-02T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-02T16:41:33.433Z"
+          "clickDate": "2026-09-02T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-02T16:41:33.433Z",
+        "lastSourceDate": "2026-09-02T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -17862,9 +17862,9 @@
         "id": "emily.ortiz@aurastudio.io",
         "email": "emily.ortiz@aurastudio.io",
         "name": "emily ortiz",
-        "joined": "2026-09-10T16:41:33.433Z",
+        "joined": "2026-09-10T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-10T16:41:33.433Z",
+        "stageDate": "2026-09-10T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17876,16 +17876,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-10T16:41:33.433Z",
+        "lastSourceDate": "2026-09-10T20:10:06.640Z",
         "income": 89,
         "hasAttribution": true
       },
@@ -17893,9 +17893,9 @@
         "id": "david.nguyen@wildbloomskin.com",
         "email": "david.nguyen@wildbloomskin.com",
         "name": "david nguyen",
-        "joined": "2026-08-21T16:41:33.433Z",
+        "joined": "2026-08-21T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-21T16:41:33.433Z",
+        "stageDate": "2026-08-21T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17907,16 +17907,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-21T16:41:33.433Z",
+        "lastSourceDate": "2026-08-21T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -17924,9 +17924,9 @@
         "id": "priya.walsh@peakformwellness.com",
         "email": "priya.walsh@peakformwellness.com",
         "name": "priya walsh",
-        "joined": "2026-08-29T16:41:33.433Z",
+        "joined": "2026-08-29T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-29T16:41:33.433Z",
+        "stageDate": "2026-08-29T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17938,16 +17938,16 @@
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Category Exact",
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-29T16:41:33.433Z",
+        "lastSourceDate": "2026-08-29T20:10:06.640Z",
         "income": 698,
         "hasAttribution": true
       },
@@ -17955,9 +17955,9 @@
         "id": "tom.patel@oakandember.com",
         "email": "tom.patel@oakandember.com",
         "name": "tom patel",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -17969,16 +17969,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -17986,9 +17986,9 @@
         "id": "lena.foster@summitgearlab.com",
         "email": "lena.foster@summitgearlab.com",
         "name": "lena foster",
-        "joined": "2026-09-08T16:41:33.433Z",
+        "joined": "2026-09-08T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-08T16:41:33.433Z",
+        "stageDate": "2026-09-08T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18000,16 +18000,16 @@
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-09-08T16:41:33.433Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Category Exact",
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-09-08T16:41:33.433Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-08T16:41:33.433Z",
+        "lastSourceDate": "2026-09-08T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18017,9 +18017,9 @@
         "id": "marcus.brooks@nordicstride.co",
         "email": "marcus.brooks@nordicstride.co",
         "name": "marcus brooks",
-        "joined": "2026-09-15T16:41:33.433Z",
+        "joined": "2026-09-15T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-15T16:41:33.433Z",
+        "stageDate": "2026-09-15T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18031,16 +18031,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-15T16:41:33.433Z",
+        "lastSourceDate": "2026-09-15T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -18048,9 +18048,9 @@
         "id": "olivia.kim@wildbloomskin.com",
         "email": "olivia.kim@wildbloomskin.com",
         "name": "olivia kim",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18062,16 +18062,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18079,9 +18079,9 @@
         "id": "ryan.chen@lumenandoak.com",
         "email": "ryan.chen@lumenandoak.com",
         "name": "ryan chen",
-        "joined": "2026-09-04T16:41:33.433Z",
+        "joined": "2026-09-04T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-04T16:41:33.433Z",
+        "stageDate": "2026-09-04T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18093,16 +18093,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-04T16:41:33.433Z"
+          "clickDate": "2026-09-04T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-04T16:41:33.433Z"
+          "clickDate": "2026-09-04T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-04T16:41:33.433Z",
+        "lastSourceDate": "2026-09-04T20:10:06.640Z",
         "income": 349,
         "hasAttribution": true
       },
@@ -18110,9 +18110,9 @@
         "id": "nadia.hayes@wildbloomskin.com",
         "email": "nadia.hayes@wildbloomskin.com",
         "name": "nadia hayes",
-        "joined": "2026-09-06T16:41:33.433Z",
+        "joined": "2026-09-06T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-06T16:41:33.433Z",
+        "stageDate": "2026-09-06T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18124,16 +18124,16 @@
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Brand Exact",
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-06T16:41:33.433Z",
+        "lastSourceDate": "2026-09-06T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -18141,9 +18141,9 @@
         "id": "chris.torres@peakformwellness.com",
         "email": "chris.torres@peakformwellness.com",
         "name": "chris torres",
-        "joined": "2026-09-14T16:41:33.433Z",
+        "joined": "2026-09-14T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-14T16:41:33.433Z",
+        "stageDate": "2026-09-14T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18155,16 +18155,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-14T16:41:33.433Z"
+          "clickDate": "2026-09-14T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-14T16:41:33.433Z"
+          "clickDate": "2026-09-14T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-14T16:41:33.433Z",
+        "lastSourceDate": "2026-09-14T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18172,9 +18172,9 @@
         "id": "amara.novak@nordicstride.co",
         "email": "amara.novak@nordicstride.co",
         "name": "amara novak",
-        "joined": "2026-08-23T16:41:33.433Z",
+        "joined": "2026-08-23T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-23T16:41:33.433Z",
+        "stageDate": "2026-08-23T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18186,16 +18186,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-23T16:41:33.433Z",
+        "lastSourceDate": "2026-08-23T20:10:06.640Z",
         "income": 349,
         "hasAttribution": true
       },
@@ -18203,9 +18203,9 @@
         "id": "jake.mitchell@aurastudio.io",
         "email": "jake.mitchell@aurastudio.io",
         "name": "jake mitchell",
-        "joined": "2026-09-15T16:41:33.433Z",
+        "joined": "2026-09-15T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-15T16:41:33.433Z",
+        "stageDate": "2026-09-15T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18217,16 +18217,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-15T16:41:33.433Z",
+        "lastSourceDate": "2026-09-15T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18234,9 +18234,9 @@
         "id": "sofia.silva@oakandember.com",
         "email": "sofia.silva@oakandember.com",
         "name": "sofia silva",
-        "joined": "2026-08-28T16:41:33.433Z",
+        "joined": "2026-08-28T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-28T16:41:33.433Z",
+        "stageDate": "2026-08-28T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18248,16 +18248,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-28T16:41:33.433Z",
+        "lastSourceDate": "2026-08-28T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18265,9 +18265,9 @@
         "id": "ben.reed@brightpeakfit.com",
         "email": "ben.reed@brightpeakfit.com",
         "name": "ben reed",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18279,16 +18279,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18296,9 +18296,9 @@
         "id": "maya.romano@peakformwellness.com",
         "email": "maya.romano@peakformwellness.com",
         "name": "maya romano",
-        "joined": "2026-08-29T16:41:33.433Z",
+        "joined": "2026-08-29T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-29T16:41:33.433Z",
+        "stageDate": "2026-08-29T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18310,16 +18310,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-29T16:41:33.433Z",
+        "lastSourceDate": "2026-08-29T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18327,9 +18327,9 @@
         "id": "liam.ortiz@lumenandoak.com",
         "email": "liam.ortiz@lumenandoak.com",
         "name": "liam ortiz",
-        "joined": "2026-09-14T16:41:33.433Z",
+        "joined": "2026-09-14T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-14T16:41:33.433Z",
+        "stageDate": "2026-09-14T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18341,16 +18341,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-14T16:41:33.433Z"
+          "clickDate": "2026-09-14T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-14T16:41:33.433Z"
+          "clickDate": "2026-09-14T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-14T16:41:33.433Z",
+        "lastSourceDate": "2026-09-14T20:10:06.640Z",
         "income": 129,
         "hasAttribution": true
       },
@@ -18358,9 +18358,9 @@
         "id": "sarah.nguyen@peakformwellness.com",
         "email": "sarah.nguyen@peakformwellness.com",
         "name": "sarah nguyen",
-        "joined": "2026-09-01T16:41:33.433Z",
+        "joined": "2026-09-01T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-01T16:41:33.433Z",
+        "stageDate": "2026-09-01T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18372,16 +18372,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-01T16:41:33.433Z"
+          "clickDate": "2026-09-01T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-01T16:41:33.433Z"
+          "clickDate": "2026-09-01T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-01T16:41:33.433Z",
+        "lastSourceDate": "2026-09-01T20:10:06.640Z",
         "income": 178,
         "hasAttribution": true
       },
@@ -18389,9 +18389,9 @@
         "id": "mike.walsh@aurastudio.io",
         "email": "mike.walsh@aurastudio.io",
         "name": "mike walsh",
-        "joined": "2026-08-29T16:41:33.433Z",
+        "joined": "2026-08-29T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-29T16:41:33.433Z",
+        "stageDate": "2026-08-29T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18403,16 +18403,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-29T16:41:33.433Z",
+        "lastSourceDate": "2026-08-29T20:10:06.640Z",
         "income": 129,
         "hasAttribution": true
       },
@@ -18420,9 +18420,9 @@
         "id": "jenna.patel@oakandember.com",
         "email": "jenna.patel@oakandember.com",
         "name": "jenna patel",
-        "joined": "2026-08-25T16:41:33.433Z",
+        "joined": "2026-08-25T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-25T16:41:33.433Z",
+        "stageDate": "2026-08-25T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18434,16 +18434,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-25T16:41:33.433Z",
+        "lastSourceDate": "2026-08-25T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18451,9 +18451,9 @@
         "id": "carlos.foster@oakandember.com",
         "email": "carlos.foster@oakandember.com",
         "name": "carlos foster",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18465,16 +18465,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18482,9 +18482,9 @@
         "id": "emily.brooks@nordicstride.co",
         "email": "emily.brooks@nordicstride.co",
         "name": "emily brooks",
-        "joined": "2026-08-25T16:41:33.433Z",
+        "joined": "2026-08-25T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-25T16:41:33.433Z",
+        "stageDate": "2026-08-25T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18496,16 +18496,16 @@
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Brand Exact",
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-25T16:41:33.433Z",
+        "lastSourceDate": "2026-08-25T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -18513,9 +18513,9 @@
         "id": "david.kim@oakandember.com",
         "email": "david.kim@oakandember.com",
         "name": "david kim",
-        "joined": "2026-08-20T16:41:33.433Z",
+        "joined": "2026-08-20T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-20T16:41:33.433Z",
+        "stageDate": "2026-08-20T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18527,16 +18527,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-20T16:41:33.433Z"
+          "clickDate": "2026-08-20T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-20T16:41:33.433Z"
+          "clickDate": "2026-08-20T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-20T16:41:33.433Z",
+        "lastSourceDate": "2026-08-20T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18544,9 +18544,9 @@
         "id": "priya.chen@lumenandoak.com",
         "email": "priya.chen@lumenandoak.com",
         "name": "priya chen",
-        "joined": "2026-09-11T16:41:33.433Z",
+        "joined": "2026-09-11T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-11T16:41:33.433Z",
+        "stageDate": "2026-09-11T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18558,16 +18558,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-11T16:41:33.433Z"
+          "clickDate": "2026-09-11T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-11T16:41:33.433Z"
+          "clickDate": "2026-09-11T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-11T16:41:33.433Z",
+        "lastSourceDate": "2026-09-11T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18575,9 +18575,9 @@
         "id": "tom.hayes@summitgearlab.com",
         "email": "tom.hayes@summitgearlab.com",
         "name": "tom hayes",
-        "joined": "2026-08-23T16:41:33.433Z",
+        "joined": "2026-08-23T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-23T16:41:33.433Z",
+        "stageDate": "2026-08-23T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18589,16 +18589,16 @@
           "tag": "@demo-0-0",
           "organic": false,
           "ad": "UGC Hook — \"I was skeptical\"",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Broad 18-54",
           "tag": "@demo-0-0",
           "organic": false,
           "ad": "UGC Hook — \"I was skeptical\"",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-23T16:41:33.433Z",
+        "lastSourceDate": "2026-08-23T20:10:06.640Z",
         "income": 349,
         "hasAttribution": true
       },
@@ -18606,9 +18606,9 @@
         "id": "lena.torres@summitgearlab.com",
         "email": "lena.torres@summitgearlab.com",
         "name": "lena torres",
-        "joined": "2026-08-31T16:41:33.433Z",
+        "joined": "2026-08-31T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-31T16:41:33.433Z",
+        "stageDate": "2026-08-31T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18620,16 +18620,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-31T16:41:33.433Z",
+        "lastSourceDate": "2026-08-31T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18637,9 +18637,9 @@
         "id": "marcus.novak@oakandember.com",
         "email": "marcus.novak@oakandember.com",
         "name": "marcus novak",
-        "joined": "2026-08-25T16:41:33.433Z",
+        "joined": "2026-08-25T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-25T16:41:33.433Z",
+        "stageDate": "2026-08-25T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18651,16 +18651,16 @@
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Brand Exact",
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-25T16:41:33.433Z",
+        "lastSourceDate": "2026-08-25T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18668,9 +18668,9 @@
         "id": "olivia.mitchell@lumenandoak.com",
         "email": "olivia.mitchell@lumenandoak.com",
         "name": "olivia mitchell",
-        "joined": "2026-08-29T16:41:33.433Z",
+        "joined": "2026-08-29T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-08-29T16:41:33.433Z",
+        "stageDate": "2026-08-29T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18682,16 +18682,16 @@
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Category Exact",
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-29T16:41:33.433Z"
+          "clickDate": "2026-08-29T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-29T16:41:33.433Z",
+        "lastSourceDate": "2026-08-29T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18699,9 +18699,9 @@
         "id": "ryan.silva@summitgearlab.com",
         "email": "ryan.silva@summitgearlab.com",
         "name": "ryan silva",
-        "joined": "2026-08-22T16:41:33.433Z",
+        "joined": "2026-08-22T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-22T16:41:33.433Z",
+        "stageDate": "2026-08-22T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18713,16 +18713,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-22T16:41:33.433Z",
+        "lastSourceDate": "2026-08-22T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18730,9 +18730,9 @@
         "id": "nadia.reed@wildbloomskin.com",
         "email": "nadia.reed@wildbloomskin.com",
         "name": "nadia reed",
-        "joined": "2026-09-15T16:41:33.433Z",
+        "joined": "2026-09-15T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-15T16:41:33.433Z",
+        "stageDate": "2026-09-15T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18744,16 +18744,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-15T16:41:33.433Z",
+        "lastSourceDate": "2026-09-15T20:10:06.640Z",
         "income": 378,
         "hasAttribution": true
       },
@@ -18761,9 +18761,9 @@
         "id": "chris.romano@lumenandoak.com",
         "email": "chris.romano@lumenandoak.com",
         "name": "chris romano",
-        "joined": "2026-09-05T16:41:33.433Z",
+        "joined": "2026-09-05T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-05T16:41:33.433Z",
+        "stageDate": "2026-09-05T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18775,16 +18775,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-05T16:41:33.433Z"
+          "clickDate": "2026-09-05T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-05T16:41:33.433Z"
+          "clickDate": "2026-09-05T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-05T16:41:33.433Z",
+        "lastSourceDate": "2026-09-05T20:10:06.640Z",
         "income": 378,
         "hasAttribution": true
       },
@@ -18792,9 +18792,9 @@
         "id": "amara.ortiz@brightpeakfit.com",
         "email": "amara.ortiz@brightpeakfit.com",
         "name": "amara ortiz",
-        "joined": "2026-08-31T16:41:33.433Z",
+        "joined": "2026-08-31T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-31T16:41:33.433Z",
+        "stageDate": "2026-08-31T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18806,16 +18806,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-31T16:41:33.433Z",
+        "lastSourceDate": "2026-08-31T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18823,9 +18823,9 @@
         "id": "jake.nguyen@wildbloomskin.com",
         "email": "jake.nguyen@wildbloomskin.com",
         "name": "jake nguyen",
-        "joined": "2026-09-12T16:41:33.433Z",
+        "joined": "2026-09-12T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-09-12T16:41:33.433Z",
+        "stageDate": "2026-09-12T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18837,16 +18837,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-12T16:41:33.433Z"
+          "clickDate": "2026-09-12T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-12T16:41:33.433Z"
+          "clickDate": "2026-09-12T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-12T16:41:33.433Z",
+        "lastSourceDate": "2026-09-12T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18854,9 +18854,9 @@
         "id": "sofia.walsh@wildbloomskin.com",
         "email": "sofia.walsh@wildbloomskin.com",
         "name": "sofia walsh",
-        "joined": "2026-08-27T16:41:33.433Z",
+        "joined": "2026-08-27T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-08-27T16:41:33.433Z",
+        "stageDate": "2026-08-27T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18868,16 +18868,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-27T16:41:33.433Z"
+          "clickDate": "2026-08-27T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-27T16:41:33.433Z"
+          "clickDate": "2026-08-27T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-27T16:41:33.433Z",
+        "lastSourceDate": "2026-08-27T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -18885,9 +18885,9 @@
         "id": "ben.patel@lumenandoak.com",
         "email": "ben.patel@lumenandoak.com",
         "name": "ben patel",
-        "joined": "2026-08-21T16:41:33.433Z",
+        "joined": "2026-08-21T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-21T16:41:33.433Z",
+        "stageDate": "2026-08-21T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18899,16 +18899,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-21T16:41:33.433Z",
+        "lastSourceDate": "2026-08-21T20:10:06.640Z",
         "income": 129,
         "hasAttribution": true
       },
@@ -18916,9 +18916,9 @@
         "id": "maya.foster@aurastudio.io",
         "email": "maya.foster@aurastudio.io",
         "name": "maya foster",
-        "joined": "2026-08-28T16:41:33.433Z",
+        "joined": "2026-08-28T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-28T16:41:33.433Z",
+        "stageDate": "2026-08-28T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18930,16 +18930,16 @@
           "tag": "@demo-0-0",
           "organic": false,
           "ad": "UGC Hook — \"I was skeptical\"",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Broad 18-54",
           "tag": "@demo-0-0",
           "organic": false,
           "ad": "UGC Hook — \"I was skeptical\"",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-28T16:41:33.433Z",
+        "lastSourceDate": "2026-08-28T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -18947,9 +18947,9 @@
         "id": "liam.brooks@wildbloomskin.com",
         "email": "liam.brooks@wildbloomskin.com",
         "name": "liam brooks",
-        "joined": "2026-09-04T16:41:33.433Z",
+        "joined": "2026-09-04T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-04T16:41:33.433Z",
+        "stageDate": "2026-09-04T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18961,16 +18961,16 @@
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-09-04T16:41:33.433Z"
+          "clickDate": "2026-09-04T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Category Exact",
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-09-04T16:41:33.433Z"
+          "clickDate": "2026-09-04T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-04T16:41:33.433Z",
+        "lastSourceDate": "2026-09-04T20:10:06.640Z",
         "income": 698,
         "hasAttribution": true
       },
@@ -18978,9 +18978,9 @@
         "id": "sarah.kim@brightpeakfit.com",
         "email": "sarah.kim@brightpeakfit.com",
         "name": "sarah kim",
-        "joined": "2026-08-31T16:41:33.433Z",
+        "joined": "2026-08-31T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-08-31T16:41:33.433Z",
+        "stageDate": "2026-08-31T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -18992,16 +18992,16 @@
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Category Exact",
           "tag": "@demo-6-0",
           "organic": false,
           "ad": "Founder Story 45s",
-          "clickDate": "2026-08-31T16:41:33.433Z"
+          "clickDate": "2026-08-31T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-31T16:41:33.433Z",
+        "lastSourceDate": "2026-08-31T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19009,9 +19009,9 @@
         "id": "mike.chen@lumenandoak.com",
         "email": "mike.chen@lumenandoak.com",
         "name": "mike chen",
-        "joined": "2026-09-01T16:41:33.433Z",
+        "joined": "2026-09-01T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-01T16:41:33.433Z",
+        "stageDate": "2026-09-01T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19023,16 +19023,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-01T16:41:33.433Z"
+          "clickDate": "2026-09-01T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-09-01T16:41:33.433Z"
+          "clickDate": "2026-09-01T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-01T16:41:33.433Z",
+        "lastSourceDate": "2026-09-01T20:10:06.640Z",
         "income": 129,
         "hasAttribution": true
       },
@@ -19040,9 +19040,9 @@
         "id": "jenna.hayes@wildbloomskin.com",
         "email": "jenna.hayes@wildbloomskin.com",
         "name": "jenna hayes",
-        "joined": "2026-09-06T16:41:33.433Z",
+        "joined": "2026-09-06T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-06T16:41:33.433Z",
+        "stageDate": "2026-09-06T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19054,16 +19054,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-06T16:41:33.433Z",
+        "lastSourceDate": "2026-09-06T20:10:06.640Z",
         "income": 189,
         "hasAttribution": true
       },
@@ -19071,9 +19071,9 @@
         "id": "carlos.torres@aurastudio.io",
         "email": "carlos.torres@aurastudio.io",
         "name": "carlos torres",
-        "joined": "2026-09-07T16:41:33.433Z",
+        "joined": "2026-09-07T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-07T16:41:33.433Z",
+        "stageDate": "2026-09-07T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19085,16 +19085,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-07T16:41:33.433Z"
+          "clickDate": "2026-09-07T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-07T16:41:33.433Z"
+          "clickDate": "2026-09-07T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-07T16:41:33.433Z",
+        "lastSourceDate": "2026-09-07T20:10:06.640Z",
         "income": 189,
         "hasAttribution": true
       },
@@ -19102,9 +19102,9 @@
         "id": "emily.novak@summitgearlab.com",
         "email": "emily.novak@summitgearlab.com",
         "name": "emily novak",
-        "joined": "2026-09-08T16:41:33.433Z",
+        "joined": "2026-09-08T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-08T16:41:33.433Z",
+        "stageDate": "2026-09-08T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19116,16 +19116,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-08T16:41:33.433Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-08T16:41:33.433Z"
+          "clickDate": "2026-09-08T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-08T16:41:33.433Z",
+        "lastSourceDate": "2026-09-08T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19133,9 +19133,9 @@
         "id": "david.mitchell@lumenandoak.com",
         "email": "david.mitchell@lumenandoak.com",
         "name": "david mitchell",
-        "joined": "2026-08-22T16:41:33.433Z",
+        "joined": "2026-08-22T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-22T16:41:33.433Z",
+        "stageDate": "2026-08-22T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19147,16 +19147,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-22T16:41:33.433Z",
+        "lastSourceDate": "2026-08-22T20:10:06.640Z",
         "income": 118,
         "hasAttribution": true
       },
@@ -19164,9 +19164,9 @@
         "id": "priya.silva@summitgearlab.com",
         "email": "priya.silva@summitgearlab.com",
         "name": "priya silva",
-        "joined": "2026-08-23T16:41:33.433Z",
+        "joined": "2026-08-23T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-23T16:41:33.433Z",
+        "stageDate": "2026-08-23T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19178,16 +19178,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-08-23T16:41:33.433Z"
+          "clickDate": "2026-08-23T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-23T16:41:33.433Z",
+        "lastSourceDate": "2026-08-23T20:10:06.640Z",
         "income": 178,
         "hasAttribution": true
       },
@@ -19195,9 +19195,9 @@
         "id": "tom.reed@wildbloomskin.com",
         "email": "tom.reed@wildbloomskin.com",
         "name": "tom reed",
-        "joined": "2026-09-13T16:41:33.433Z",
+        "joined": "2026-09-13T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-13T16:41:33.433Z",
+        "stageDate": "2026-09-13T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19209,16 +19209,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-13T16:41:33.433Z"
+          "clickDate": "2026-09-13T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-13T16:41:33.433Z"
+          "clickDate": "2026-09-13T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-13T16:41:33.433Z",
+        "lastSourceDate": "2026-09-13T20:10:06.640Z",
         "income": 129,
         "hasAttribution": true
       },
@@ -19226,9 +19226,9 @@
         "id": "lena.romano@brightpeakfit.com",
         "email": "lena.romano@brightpeakfit.com",
         "name": "lena romano",
-        "joined": "2026-08-21T16:41:33.433Z",
+        "joined": "2026-08-21T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-08-21T16:41:33.433Z",
+        "stageDate": "2026-08-21T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19240,16 +19240,16 @@
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Visitors 7d",
           "tag": "@demo-2-0",
           "organic": false,
           "ad": "Before & After",
-          "clickDate": "2026-08-21T16:41:33.433Z"
+          "clickDate": "2026-08-21T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-21T16:41:33.433Z",
+        "lastSourceDate": "2026-08-21T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19257,9 +19257,9 @@
         "id": "marcus.ortiz@oakandember.com",
         "email": "marcus.ortiz@oakandember.com",
         "name": "marcus ortiz",
-        "joined": "2026-08-28T16:41:33.433Z",
+        "joined": "2026-08-28T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-28T16:41:33.433Z",
+        "stageDate": "2026-08-28T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19271,16 +19271,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-28T16:41:33.433Z"
+          "clickDate": "2026-08-28T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-28T16:41:33.433Z",
+        "lastSourceDate": "2026-08-28T20:10:06.640Z",
         "income": 118,
         "hasAttribution": true
       },
@@ -19288,9 +19288,9 @@
         "id": "olivia.nguyen@lumenandoak.com",
         "email": "olivia.nguyen@lumenandoak.com",
         "name": "olivia nguyen",
-        "joined": "2026-08-22T16:41:33.433Z",
+        "joined": "2026-08-22T20:10:06.640Z",
         "stage": "Opportunity",
-        "stageDate": "2026-08-22T16:41:33.433Z",
+        "stageDate": "2026-08-22T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19302,16 +19302,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-22T16:41:33.433Z"
+          "clickDate": "2026-08-22T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-22T16:41:33.433Z",
+        "lastSourceDate": "2026-08-22T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19319,9 +19319,9 @@
         "id": "ryan.walsh@oakandember.com",
         "email": "ryan.walsh@oakandember.com",
         "name": "ryan walsh",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19333,16 +19333,16 @@
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "LAL 1% Purchasers",
           "tag": "@demo-1-0",
           "organic": false,
           "ad": "Testimonial Mashup",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19350,9 +19350,9 @@
         "id": "nadia.patel@summitgearlab.com",
         "email": "nadia.patel@summitgearlab.com",
         "name": "nadia patel",
-        "joined": "2026-09-09T16:41:33.433Z",
+        "joined": "2026-09-09T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-09T16:41:33.433Z",
+        "stageDate": "2026-09-09T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19364,16 +19364,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-09T16:41:33.433Z"
+          "clickDate": "2026-09-09T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-09T16:41:33.433Z",
+        "lastSourceDate": "2026-09-09T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19381,9 +19381,9 @@
         "id": "chris.foster@brightpeakfit.com",
         "email": "chris.foster@brightpeakfit.com",
         "name": "chris foster",
-        "joined": "2026-09-05T16:41:33.433Z",
+        "joined": "2026-09-05T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-05T16:41:33.433Z",
+        "stageDate": "2026-09-05T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19395,16 +19395,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-05T16:41:33.433Z"
+          "clickDate": "2026-09-05T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-05T16:41:33.433Z"
+          "clickDate": "2026-09-05T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-05T16:41:33.433Z",
+        "lastSourceDate": "2026-09-05T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19412,9 +19412,9 @@
         "id": "amara.brooks@brightpeakfit.com",
         "email": "amara.brooks@brightpeakfit.com",
         "name": "amara brooks",
-        "joined": "2026-09-12T16:41:33.433Z",
+        "joined": "2026-09-12T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-12T16:41:33.433Z",
+        "stageDate": "2026-09-12T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19426,16 +19426,16 @@
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-09-12T16:41:33.433Z"
+          "clickDate": "2026-09-12T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Brand Exact",
           "tag": "@demo-5-0",
           "organic": false,
           "ad": "Press Feature — Static",
-          "clickDate": "2026-09-12T16:41:33.433Z"
+          "clickDate": "2026-09-12T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-12T16:41:33.433Z",
+        "lastSourceDate": "2026-09-12T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19443,9 +19443,9 @@
         "id": "jake.kim@summitgearlab.com",
         "email": "jake.kim@summitgearlab.com",
         "name": "jake kim",
-        "joined": "2026-09-06T16:41:33.433Z",
+        "joined": "2026-09-06T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-06T16:41:33.433Z",
+        "stageDate": "2026-09-06T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19457,16 +19457,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-06T16:41:33.433Z"
+          "clickDate": "2026-09-06T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-06T16:41:33.433Z",
+        "lastSourceDate": "2026-09-06T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19474,9 +19474,9 @@
         "id": "sofia.chen@oakandember.com",
         "email": "sofia.chen@oakandember.com",
         "name": "sofia chen",
-        "joined": "2026-09-11T16:41:33.433Z",
+        "joined": "2026-09-11T20:10:06.640Z",
         "stage": "Lead",
-        "stageDate": "2026-09-11T16:41:33.433Z",
+        "stageDate": "2026-09-11T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19488,16 +19488,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-11T16:41:33.433Z"
+          "clickDate": "2026-09-11T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-09-11T16:41:33.433Z"
+          "clickDate": "2026-09-11T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-11T16:41:33.433Z",
+        "lastSourceDate": "2026-09-11T20:10:06.640Z",
         "income": 0,
         "hasAttribution": true
       },
@@ -19505,9 +19505,9 @@
         "id": "ben.hayes@aurastudio.io",
         "email": "ben.hayes@aurastudio.io",
         "name": "ben hayes",
-        "joined": "2026-09-10T16:41:33.433Z",
+        "joined": "2026-09-10T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-10T16:41:33.433Z",
+        "stageDate": "2026-09-10T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19519,16 +19519,16 @@
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Engagers 30d",
           "tag": "@demo-3-0",
           "organic": false,
           "ad": "Static — Bundle Offer",
-          "clickDate": "2026-09-10T16:41:33.433Z"
+          "clickDate": "2026-09-10T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-10T16:41:33.433Z",
+        "lastSourceDate": "2026-09-10T20:10:06.640Z",
         "income": 59,
         "hasAttribution": true
       },
@@ -19536,9 +19536,9 @@
         "id": "maya.torres@lumenandoak.com",
         "email": "maya.torres@lumenandoak.com",
         "name": "maya torres",
-        "joined": "2026-09-15T16:41:33.433Z",
+        "joined": "2026-09-15T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-09-15T16:41:33.433Z",
+        "stageDate": "2026-09-15T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19550,16 +19550,16 @@
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
         "lastSource": {
           "name": "UGC Test Pod",
           "tag": "@demo-4-0",
           "organic": false,
           "ad": "Problem/Solution 30s",
-          "clickDate": "2026-09-15T16:41:33.433Z"
+          "clickDate": "2026-09-15T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-09-15T16:41:33.433Z",
+        "lastSourceDate": "2026-09-15T20:10:06.640Z",
         "income": 349,
         "hasAttribution": true
       },
@@ -19567,9 +19567,9 @@
         "id": "liam.novak@aurastudio.io",
         "email": "liam.novak@aurastudio.io",
         "name": "liam novak",
-        "joined": "2026-08-25T16:41:33.433Z",
+        "joined": "2026-08-25T20:10:06.640Z",
         "stage": "Customer",
-        "stageDate": "2026-08-25T16:41:33.433Z",
+        "stageDate": "2026-08-25T20:10:06.640Z",
         "consent": "GRANTED",
         "tags": [
           "!site",
@@ -19581,16 +19581,16 @@
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
         "lastSource": {
           "name": "Site Remarketing",
           "tag": "@demo-7-0",
           "organic": false,
           "ad": "Carousel — Best Sellers",
-          "clickDate": "2026-08-25T16:41:33.433Z"
+          "clickDate": "2026-08-25T20:10:06.640Z"
         },
-        "lastSourceDate": "2026-08-25T16:41:33.433Z",
+        "lastSourceDate": "2026-08-25T20:10:06.640Z",
         "income": 89,
         "hasAttribution": true
       }
@@ -19600,7 +19600,7 @@
         "id": "demo-sale-0",
         "email": "sarah.mitchell@wildbloomskin.com",
         "leadName": "sarah mitchell",
-        "date": "2026-09-09T16:41:33.433Z",
+        "date": "2026-09-09T20:10:06.640Z",
         "amount": 349,
         "currency": "USD",
         "product": "Pro System",
@@ -19613,7 +19613,7 @@
         "id": "demo-sale-1",
         "email": "mike.silva@nordicstride.co",
         "leadName": "mike silva",
-        "date": "2026-08-26T16:41:33.433Z",
+        "date": "2026-08-26T20:10:06.640Z",
         "amount": 89,
         "currency": "USD",
         "product": "Starter Kit",
@@ -19626,7 +19626,7 @@
         "id": "demo-sale-3",
         "email": "carlos.romano@lumenandoak.com",
         "leadName": "carlos romano",
-        "date": "2026-09-03T16:41:33.433Z",
+        "date": "2026-09-03T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19639,7 +19639,7 @@
         "id": "demo-sale-4",
         "email": "emily.ortiz@aurastudio.io",
         "leadName": "emily ortiz",
-        "date": "2026-09-11T16:41:33.433Z",
+        "date": "2026-09-11T20:10:06.640Z",
         "amount": 89,
         "currency": "USD",
         "product": "Starter Kit",
@@ -19652,7 +19652,7 @@
         "id": "demo-sale-6",
         "email": "priya.walsh@peakformwellness.com",
         "leadName": "priya walsh",
-        "date": "2026-08-30T16:41:33.433Z",
+        "date": "2026-08-30T20:10:06.640Z",
         "amount": 698,
         "currency": "USD",
         "product": "Pro System",
@@ -19665,7 +19665,7 @@
         "id": "demo-sale-9",
         "email": "marcus.brooks@nordicstride.co",
         "leadName": "marcus brooks",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19678,7 +19678,7 @@
         "id": "demo-sale-11",
         "email": "ryan.chen@lumenandoak.com",
         "leadName": "ryan chen",
-        "date": "2026-09-05T16:41:33.433Z",
+        "date": "2026-09-05T20:10:06.640Z",
         "amount": 349,
         "currency": "USD",
         "product": "Pro System",
@@ -19691,7 +19691,7 @@
         "id": "demo-sale-12",
         "email": "nadia.hayes@wildbloomskin.com",
         "leadName": "nadia hayes",
-        "date": "2026-09-07T16:41:33.433Z",
+        "date": "2026-09-07T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19704,7 +19704,7 @@
         "id": "demo-sale-14",
         "email": "amara.novak@nordicstride.co",
         "leadName": "amara novak",
-        "date": "2026-08-24T16:41:33.433Z",
+        "date": "2026-08-24T20:10:06.640Z",
         "amount": 349,
         "currency": "USD",
         "product": "Pro System",
@@ -19717,7 +19717,7 @@
         "id": "demo-sale-19",
         "email": "liam.ortiz@lumenandoak.com",
         "leadName": "liam ortiz",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "amount": 129,
         "currency": "USD",
         "product": "Gift Set",
@@ -19730,7 +19730,7 @@
         "id": "demo-sale-20",
         "email": "sarah.nguyen@peakformwellness.com",
         "leadName": "sarah nguyen",
-        "date": "2026-09-02T16:41:33.433Z",
+        "date": "2026-09-02T20:10:06.640Z",
         "amount": 178,
         "currency": "USD",
         "product": "Starter Kit",
@@ -19743,7 +19743,7 @@
         "id": "demo-sale-21",
         "email": "mike.walsh@aurastudio.io",
         "leadName": "mike walsh",
-        "date": "2026-08-30T16:41:33.433Z",
+        "date": "2026-08-30T20:10:06.640Z",
         "amount": 129,
         "currency": "USD",
         "product": "Gift Set",
@@ -19756,7 +19756,7 @@
         "id": "demo-sale-24",
         "email": "emily.brooks@nordicstride.co",
         "leadName": "emily brooks",
-        "date": "2026-08-26T16:41:33.433Z",
+        "date": "2026-08-26T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19769,7 +19769,7 @@
         "id": "demo-sale-27",
         "email": "tom.hayes@summitgearlab.com",
         "leadName": "tom hayes",
-        "date": "2026-08-24T16:41:33.433Z",
+        "date": "2026-08-24T20:10:06.640Z",
         "amount": 349,
         "currency": "USD",
         "product": "Pro System",
@@ -19782,7 +19782,7 @@
         "id": "demo-sale-32",
         "email": "nadia.reed@wildbloomskin.com",
         "leadName": "nadia reed",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "amount": 378,
         "currency": "USD",
         "product": "Performance Bundle",
@@ -19795,7 +19795,7 @@
         "id": "demo-sale-33",
         "email": "chris.romano@lumenandoak.com",
         "leadName": "chris romano",
-        "date": "2026-09-06T16:41:33.433Z",
+        "date": "2026-09-06T20:10:06.640Z",
         "amount": 378,
         "currency": "USD",
         "product": "Performance Bundle",
@@ -19808,7 +19808,7 @@
         "id": "demo-sale-37",
         "email": "ben.patel@lumenandoak.com",
         "leadName": "ben patel",
-        "date": "2026-08-22T16:41:33.433Z",
+        "date": "2026-08-22T20:10:06.640Z",
         "amount": 129,
         "currency": "USD",
         "product": "Gift Set",
@@ -19821,7 +19821,7 @@
         "id": "demo-sale-38",
         "email": "maya.foster@aurastudio.io",
         "leadName": "maya foster",
-        "date": "2026-08-29T16:41:33.433Z",
+        "date": "2026-08-29T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19834,7 +19834,7 @@
         "id": "demo-sale-39",
         "email": "liam.brooks@wildbloomskin.com",
         "leadName": "liam brooks",
-        "date": "2026-09-05T16:41:33.433Z",
+        "date": "2026-09-05T20:10:06.640Z",
         "amount": 698,
         "currency": "USD",
         "product": "Pro System",
@@ -19847,7 +19847,7 @@
         "id": "demo-sale-41",
         "email": "mike.chen@lumenandoak.com",
         "leadName": "mike chen",
-        "date": "2026-09-02T16:41:33.433Z",
+        "date": "2026-09-02T20:10:06.640Z",
         "amount": 129,
         "currency": "USD",
         "product": "Gift Set",
@@ -19860,7 +19860,7 @@
         "id": "demo-sale-42",
         "email": "jenna.hayes@wildbloomskin.com",
         "leadName": "jenna hayes",
-        "date": "2026-09-07T16:41:33.433Z",
+        "date": "2026-09-07T20:10:06.640Z",
         "amount": 189,
         "currency": "USD",
         "product": "Performance Bundle",
@@ -19873,7 +19873,7 @@
         "id": "demo-sale-43",
         "email": "carlos.torres@aurastudio.io",
         "leadName": "carlos torres",
-        "date": "2026-09-08T16:41:33.433Z",
+        "date": "2026-09-08T20:10:06.640Z",
         "amount": 189,
         "currency": "USD",
         "product": "Performance Bundle",
@@ -19886,7 +19886,7 @@
         "id": "demo-sale-45",
         "email": "david.mitchell@lumenandoak.com",
         "leadName": "david mitchell",
-        "date": "2026-08-23T16:41:33.433Z",
+        "date": "2026-08-23T20:10:06.640Z",
         "amount": 118,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19899,7 +19899,7 @@
         "id": "demo-sale-46",
         "email": "priya.silva@summitgearlab.com",
         "leadName": "priya silva",
-        "date": "2026-08-24T16:41:33.433Z",
+        "date": "2026-08-24T20:10:06.640Z",
         "amount": 178,
         "currency": "USD",
         "product": "Starter Kit",
@@ -19912,7 +19912,7 @@
         "id": "demo-sale-47",
         "email": "tom.reed@wildbloomskin.com",
         "leadName": "tom reed",
-        "date": "2026-09-14T16:41:33.433Z",
+        "date": "2026-09-14T20:10:06.640Z",
         "amount": 129,
         "currency": "USD",
         "product": "Gift Set",
@@ -19925,7 +19925,7 @@
         "id": "demo-sale-49",
         "email": "marcus.ortiz@oakandember.com",
         "leadName": "marcus ortiz",
-        "date": "2026-08-29T16:41:33.433Z",
+        "date": "2026-08-29T20:10:06.640Z",
         "amount": 118,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19938,7 +19938,7 @@
         "id": "demo-sale-57",
         "email": "ben.hayes@aurastudio.io",
         "leadName": "ben hayes",
-        "date": "2026-09-11T16:41:33.433Z",
+        "date": "2026-09-11T20:10:06.640Z",
         "amount": 59,
         "currency": "USD",
         "product": "Subscription — Monthly",
@@ -19951,7 +19951,7 @@
         "id": "demo-sale-58",
         "email": "maya.torres@lumenandoak.com",
         "leadName": "maya torres",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "amount": 349,
         "currency": "USD",
         "product": "Pro System",
@@ -19964,7 +19964,7 @@
         "id": "demo-sale-59",
         "email": "liam.novak@aurastudio.io",
         "leadName": "liam novak",
-        "date": "2026-08-26T16:41:33.433Z",
+        "date": "2026-08-26T20:10:06.640Z",
         "amount": 89,
         "currency": "USD",
         "product": "Starter Kit",
@@ -19979,7 +19979,7 @@
         "id": "demo-call-6",
         "email": "priya.walsh@peakformwellness.com",
         "leadName": "priya walsh",
-        "date": "2026-08-30T16:41:33.433Z",
+        "date": "2026-08-30T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -19991,7 +19991,7 @@
         "id": "demo-call-7",
         "email": "tom.patel@oakandember.com",
         "leadName": "tom patel",
-        "date": "2026-09-10T16:41:33.433Z",
+        "date": "2026-09-10T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20003,7 +20003,7 @@
         "id": "demo-call-13",
         "email": "chris.torres@peakformwellness.com",
         "leadName": "chris torres",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20015,7 +20015,7 @@
         "id": "demo-call-29",
         "email": "marcus.novak@oakandember.com",
         "leadName": "marcus novak",
-        "date": "2026-08-26T16:41:33.433Z",
+        "date": "2026-08-26T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20027,7 +20027,7 @@
         "id": "demo-call-31",
         "email": "ryan.silva@summitgearlab.com",
         "leadName": "ryan silva",
-        "date": "2026-08-23T16:41:33.433Z",
+        "date": "2026-08-23T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "NO_SHOW",
         "qualified": true,
@@ -20039,7 +20039,7 @@
         "id": "demo-call-39",
         "email": "liam.brooks@wildbloomskin.com",
         "leadName": "liam brooks",
-        "date": "2026-09-05T16:41:33.433Z",
+        "date": "2026-09-05T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20051,7 +20051,7 @@
         "id": "demo-call-45",
         "email": "david.mitchell@lumenandoak.com",
         "leadName": "david mitchell",
-        "date": "2026-08-23T16:41:33.433Z",
+        "date": "2026-08-23T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20063,7 +20063,7 @@
         "id": "demo-call-47",
         "email": "tom.reed@wildbloomskin.com",
         "leadName": "tom reed",
-        "date": "2026-09-14T16:41:33.433Z",
+        "date": "2026-09-14T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20075,7 +20075,7 @@
         "id": "demo-call-48",
         "email": "lena.romano@brightpeakfit.com",
         "leadName": "lena romano",
-        "date": "2026-08-22T16:41:33.433Z",
+        "date": "2026-08-22T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20087,7 +20087,7 @@
         "id": "demo-call-49",
         "email": "marcus.ortiz@oakandember.com",
         "leadName": "marcus ortiz",
-        "date": "2026-08-29T16:41:33.433Z",
+        "date": "2026-08-29T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20099,7 +20099,7 @@
         "id": "demo-call-55",
         "email": "jake.kim@summitgearlab.com",
         "leadName": "jake kim",
-        "date": "2026-09-07T16:41:33.433Z",
+        "date": "2026-09-07T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20111,7 +20111,7 @@
         "id": "demo-call-57",
         "email": "ben.hayes@aurastudio.io",
         "leadName": "ben hayes",
-        "date": "2026-09-11T16:41:33.433Z",
+        "date": "2026-09-11T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20123,7 +20123,7 @@
         "id": "demo-call-58",
         "email": "maya.torres@lumenandoak.com",
         "leadName": "maya torres",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "name": "Strategy Call",
         "state": "QUALIFIED",
         "qualified": true,
@@ -20137,7 +20137,7 @@
         "id": "demo-sub-3",
         "email": "carlos.romano@lumenandoak.com",
         "leadName": "carlos romano",
-        "date": "2026-09-02T16:41:33.433Z",
+        "date": "2026-09-02T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20148,7 +20148,7 @@
         "id": "demo-sub-9",
         "email": "marcus.brooks@nordicstride.co",
         "leadName": "marcus brooks",
-        "date": "2026-09-15T16:41:33.433Z",
+        "date": "2026-09-15T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20159,7 +20159,7 @@
         "id": "demo-sub-12",
         "email": "nadia.hayes@wildbloomskin.com",
         "leadName": "nadia hayes",
-        "date": "2026-09-06T16:41:33.433Z",
+        "date": "2026-09-06T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20170,7 +20170,7 @@
         "id": "demo-sub-24",
         "email": "emily.brooks@nordicstride.co",
         "leadName": "emily brooks",
-        "date": "2026-08-25T16:41:33.433Z",
+        "date": "2026-08-25T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20181,7 +20181,7 @@
         "id": "demo-sub-38",
         "email": "maya.foster@aurastudio.io",
         "leadName": "maya foster",
-        "date": "2026-08-28T16:41:33.433Z",
+        "date": "2026-08-28T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20192,7 +20192,7 @@
         "id": "demo-sub-45",
         "email": "david.mitchell@lumenandoak.com",
         "leadName": "david mitchell",
-        "date": "2026-08-22T16:41:33.433Z",
+        "date": "2026-08-22T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20203,7 +20203,7 @@
         "id": "demo-sub-49",
         "email": "marcus.ortiz@oakandember.com",
         "leadName": "marcus ortiz",
-        "date": "2026-08-28T16:41:33.433Z",
+        "date": "2026-08-28T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20214,7 +20214,7 @@
         "id": "demo-sub-57",
         "email": "ben.hayes@aurastudio.io",
         "leadName": "ben hayes",
-        "date": "2026-09-10T16:41:33.433Z",
+        "date": "2026-09-10T20:10:06.640Z",
         "name": "Monthly Membership",
         "price": 59,
         "periodicity": "MONTH",
@@ -20240,6 +20240,17 @@
         "amount": 96
       }
     ],
+    "sync": {
+      "incremental": false,
+      "leadsFetched": 60,
+      "stale": false,
+      "truncated": {
+        "leads": false,
+        "sales": false,
+        "calls": false,
+        "subscriptions": false
+      }
+    },
     "totals": {
       "leads": 60,
       "attributed": 60,
@@ -20648,6 +20659,7 @@
     ]
   },
   "scale": {
+    "checkedAt": "2026-09-15T08:00:00.000Z",
     "window": {
       "start": "2026-06-18",
       "end": "2026-09-15"
@@ -20659,58 +20671,69 @@
         "level": "ACCOUNT",
         "category": null,
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 82,
-        "ceiling": 118.07,
-        "ceilingBasis": "CALLER_PROVIDED",
-        "saturationSpend": 2310,
+        "daysSampled": 80,
+        "ceiling": null,
+        "ceilingBasis": null,
+        "ltvWindow": null,
+        "saturationSpend": null,
+        "efficientSpend": null,
+        "saturationReason": null,
         "points": [
           {
             "spend": 910,
-            "avgCac": 63.22,
-            "marginalCac": 63.22,
-            "customers": 14
+            "days": 10,
+            "customers": 169,
+            "avgCac": 53.82,
+            "marginalCac": null
           },
           {
             "spend": 1260,
-            "avgCac": 64.58,
-            "marginalCac": 67.12,
-            "customers": 20
+            "days": 10,
+            "customers": 228,
+            "avgCac": 55.16,
+            "marginalCac": 59.32
           },
           {
             "spend": 1610,
-            "avgCac": 68.68,
-            "marginalCac": 78.81,
-            "customers": 23
+            "days": 10,
+            "customers": 272,
+            "avgCac": 59.17,
+            "marginalCac": 79.55
           },
           {
             "spend": 1960,
-            "avgCac": 75.5,
-            "marginalCac": 98.3,
-            "customers": 26
+            "days": 10,
+            "customers": 298,
+            "avgCac": 65.86,
+            "marginalCac": 134.62
           },
           {
             "spend": 2310,
-            "avgCac": 85.05,
-            "marginalCac": 125.59,
-            "customers": 27
+            "days": 10,
+            "customers": 307,
+            "avgCac": 75.22,
+            "marginalCac": 388.89
           },
           {
             "spend": 2660,
-            "avgCac": 97.33,
-            "marginalCac": 160.68,
-            "customers": 27
+            "days": 10,
+            "customers": 307,
+            "avgCac": 87.26,
+            "marginalCac": null
           },
           {
             "spend": 3010,
-            "avgCac": 112.34,
-            "marginalCac": 203.56,
-            "customers": 27
+            "days": 10,
+            "customers": 307,
+            "avgCac": 101.97,
+            "marginalCac": null
           },
           {
             "spend": 3360,
-            "avgCac": 130.07,
-            "marginalCac": 254.23,
-            "customers": 26
+            "days": 10,
+            "customers": 307,
+            "avgCac": 119.36,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -20721,58 +20744,69 @@
         "level": "ACCOUNT",
         "category": null,
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 69,
-        "ceiling": 104.24,
-        "ceilingBasis": "CALLER_PROVIDED",
+        "daysSampled": 64,
+        "ceiling": null,
+        "ceilingBasis": null,
+        "ltvWindow": null,
         "saturationSpend": null,
+        "efficientSpend": null,
+        "saturationReason": null,
         "points": [
           {
             "spend": 910,
-            "avgCac": 48.86,
-            "marginalCac": 48.86,
-            "customers": 19
+            "days": 8,
+            "customers": 120,
+            "avgCac": 60.48,
+            "marginalCac": null
           },
           {
             "spend": 1260,
-            "avgCac": 49.72,
-            "marginalCac": 51.32,
-            "customers": 25
+            "days": 8,
+            "customers": 165,
+            "avgCac": 61.02,
+            "marginalCac": 62.22
           },
           {
             "spend": 1610,
-            "avgCac": 52.3,
-            "marginalCac": 58.67,
-            "customers": 31
+            "days": 8,
+            "customers": 206,
+            "avgCac": 62.63,
+            "marginalCac": 68.29
           },
           {
             "spend": 1960,
-            "avgCac": 56.59,
-            "marginalCac": 70.93,
-            "customers": 35
+            "days": 8,
+            "customers": 240,
+            "avgCac": 65.31,
+            "marginalCac": 82.35
           },
           {
             "spend": 2310,
-            "avgCac": 62.59,
-            "marginalCac": 88.09,
-            "customers": 37
+            "days": 8,
+            "customers": 268,
+            "avgCac": 69.07,
+            "marginalCac": 100
           },
           {
             "spend": 2660,
-            "avgCac": 70.32,
-            "marginalCac": 110.16,
-            "customers": 38
+            "days": 8,
+            "customers": 288,
+            "avgCac": 73.91,
+            "marginalCac": 140
           },
           {
             "spend": 3010,
-            "avgCac": 79.76,
-            "marginalCac": 137.13,
-            "customers": 38
+            "days": 8,
+            "customers": 302,
+            "avgCac": 79.82,
+            "marginalCac": 200
           },
           {
             "spend": 3360,
-            "avgCac": 90.91,
-            "marginalCac": 169.01,
-            "customers": 37
+            "days": 8,
+            "customers": 310,
+            "avgCac": 86.8,
+            "marginalCac": 350
           }
         ],
         "notes": []
@@ -20783,58 +20817,69 @@
         "level": "SOURCE_LINK",
         "category": "Prospecting — Broad",
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 71,
-        "ceiling": 120.35,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
-        "saturationSpend": 1076,
+        "daysSampled": 64,
+        "ceiling": 120.11,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
+        "saturationSpend": 826,
+        "efficientSpend": 701,
+        "saturationReason": "MARGINAL_CAC_ABOVE_CEILING",
         "points": [
           {
             "spend": 325,
-            "avgCac": 45.82,
-            "marginalCac": 45.82,
-            "customers": 7
+            "days": 8,
+            "customers": 51,
+            "avgCac": 51.33,
+            "marginalCac": null
           },
           {
             "spend": 451,
-            "avgCac": 46.71,
-            "marginalCac": 48.36,
-            "customers": 10
+            "days": 8,
+            "customers": 69,
+            "avgCac": 52.24,
+            "marginalCac": 56
           },
           {
             "spend": 576,
-            "avgCac": 49.37,
-            "marginalCac": 55.96,
-            "customers": 12
+            "days": 8,
+            "customers": 84,
+            "avgCac": 54.97,
+            "marginalCac": 66.67
           },
           {
             "spend": 701,
-            "avgCac": 53.79,
-            "marginalCac": 68.6,
-            "customers": 13
+            "days": 8,
+            "customers": 94,
+            "avgCac": 59.51,
+            "marginalCac": 100
           },
           {
             "spend": 826,
-            "avgCac": 59.98,
-            "marginalCac": 86.28,
-            "customers": 14
+            "days": 8,
+            "customers": 100,
+            "avgCac": 65.85,
+            "marginalCac": 166.67
           },
           {
             "spend": 951,
-            "avgCac": 67.94,
-            "marginalCac": 109.01,
-            "customers": 14
+            "days": 8,
+            "customers": 103,
+            "avgCac": 74.01,
+            "marginalCac": 333.33
           },
           {
             "spend": 1076,
-            "avgCac": 77.66,
-            "marginalCac": 136.79,
-            "customers": 14
+            "days": 8,
+            "customers": 103,
+            "avgCac": 83.98,
+            "marginalCac": null
           },
           {
             "spend": 1202,
-            "avgCac": 89.25,
-            "marginalCac": 169.9,
-            "customers": 13
+            "days": 8,
+            "customers": 103,
+            "avgCac": 95.87,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -20845,58 +20890,69 @@
         "level": "SOURCE_LINK",
         "category": "Lookalike 1% Buyers",
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 73,
-        "ceiling": 114.29,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
-        "saturationSpend": 1041,
+        "daysSampled": 64,
+        "ceiling": 123.34,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
+        "saturationSpend": 799,
+        "efficientSpend": 678,
+        "saturationReason": "MARGINAL_CAC_ABOVE_CEILING",
         "points": [
           {
             "spend": 315,
-            "avgCac": 45.01,
-            "marginalCac": 45.01,
-            "customers": 7
+            "days": 8,
+            "customers": 48,
+            "avgCac": 52.45,
+            "marginalCac": null
           },
           {
             "spend": 436,
-            "avgCac": 45.93,
-            "marginalCac": 47.64,
-            "customers": 9
+            "days": 8,
+            "customers": 66,
+            "avgCac": 53.21,
+            "marginalCac": 53.78
           },
           {
             "spend": 557,
-            "avgCac": 48.68,
-            "marginalCac": 55.49,
-            "customers": 11
+            "days": 8,
+            "customers": 80,
+            "avgCac": 55.47,
+            "marginalCac": 69.14
           },
           {
             "spend": 678,
-            "avgCac": 53.26,
-            "marginalCac": 68.56,
-            "customers": 13
+            "days": 8,
+            "customers": 92,
+            "avgCac": 59.24,
+            "marginalCac": 80.67
           },
           {
             "spend": 799,
-            "avgCac": 59.66,
-            "marginalCac": 86.86,
-            "customers": 13
+            "days": 8,
+            "customers": 99,
+            "avgCac": 64.52,
+            "marginalCac": 138.29
           },
           {
             "spend": 920,
-            "avgCac": 67.89,
-            "marginalCac": 110.39,
-            "customers": 14
+            "days": 8,
+            "customers": 103,
+            "avgCac": 71.3,
+            "marginalCac": 242
           },
           {
             "spend": 1041,
-            "avgCac": 77.96,
-            "marginalCac": 139.14,
-            "customers": 13
+            "days": 8,
+            "customers": 105,
+            "avgCac": 79.59,
+            "marginalCac": 484
           },
           {
             "spend": 1162,
-            "avgCac": 89.85,
-            "marginalCac": 173.12,
-            "customers": 13
+            "days": 8,
+            "customers": 105,
+            "avgCac": 89.38,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -20908,57 +20964,68 @@
         "category": "Lookalike 1% Buyers",
         "attributionModel": "FIRST_CLICK",
         "daysSampled": 64,
-        "ceiling": 112.69,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
+        "ceiling": 125.19,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
         "saturationSpend": null,
+        "efficientSpend": null,
+        "saturationReason": null,
         "points": [
           {
             "spend": 299,
-            "avgCac": 45.74,
-            "marginalCac": 45.74,
-            "customers": 7
+            "days": 8,
+            "customers": 45,
+            "avgCac": 53.75,
+            "marginalCac": null
           },
           {
             "spend": 414,
-            "avgCac": 46.23,
-            "marginalCac": 47.16,
-            "customers": 9
+            "days": 8,
+            "customers": 61,
+            "avgCac": 54.47,
+            "marginalCac": 57.5
           },
           {
             "spend": 529,
-            "avgCac": 47.73,
-            "marginalCac": 51.42,
-            "customers": 11
+            "days": 8,
+            "customers": 75,
+            "avgCac": 56.64,
+            "marginalCac": 65.71
           },
           {
             "spend": 644,
-            "avgCac": 50.21,
-            "marginalCac": 58.52,
-            "customers": 13
+            "days": 8,
+            "customers": 85,
+            "avgCac": 60.26,
+            "marginalCac": 92
           },
           {
             "spend": 759,
-            "avgCac": 53.7,
-            "marginalCac": 68.47,
-            "customers": 14
+            "days": 8,
+            "customers": 93,
+            "avgCac": 65.34,
+            "marginalCac": 115
           },
           {
             "spend": 874,
-            "avgCac": 58.17,
-            "marginalCac": 81.27,
-            "customers": 15
+            "days": 8,
+            "customers": 97,
+            "avgCac": 71.86,
+            "marginalCac": 230
           },
           {
             "spend": 989,
-            "avgCac": 63.65,
-            "marginalCac": 96.9,
-            "customers": 16
+            "days": 8,
+            "customers": 99,
+            "avgCac": 79.83,
+            "marginalCac": 460
           },
           {
             "spend": 1105,
-            "avgCac": 70.17,
-            "marginalCac": 115.56,
-            "customers": 16
+            "days": 8,
+            "customers": 99,
+            "avgCac": 89.35,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -20969,58 +21036,69 @@
         "level": "SOURCE_LINK",
         "category": "Prospecting — Broad",
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 85,
-        "ceiling": 114.01,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
-        "saturationSpend": 973,
+        "daysSampled": 88,
+        "ceiling": 107.92,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
+        "saturationSpend": 747,
+        "efficientSpend": 633,
+        "saturationReason": "MARGINAL_CAC_ABOVE_CEILING",
         "points": [
           {
             "spend": 294,
-            "avgCac": 62.73,
-            "marginalCac": 62.73,
-            "customers": 5
+            "days": 11,
+            "customers": 69,
+            "avgCac": 47.03,
+            "marginalCac": null
           },
           {
             "spend": 407,
-            "avgCac": 63.31,
-            "marginalCac": 64.4,
-            "customers": 6
+            "days": 11,
+            "customers": 94,
+            "avgCac": 47.7,
+            "marginalCac": 49.72
           },
           {
             "spend": 520,
-            "avgCac": 65.07,
-            "marginalCac": 69.41,
-            "customers": 8
+            "days": 11,
+            "customers": 115,
+            "avgCac": 49.7,
+            "marginalCac": 59.19
           },
           {
             "spend": 633,
-            "avgCac": 67.99,
-            "marginalCac": 77.76,
-            "customers": 9
+            "days": 11,
+            "customers": 131,
+            "avgCac": 53.04,
+            "marginalCac": 77.69
           },
           {
             "spend": 747,
-            "avgCac": 72.12,
-            "marginalCac": 89.56,
-            "customers": 10
+            "days": 11,
+            "customers": 142,
+            "avgCac": 57.76,
+            "marginalCac": 114
           },
           {
             "spend": 860,
-            "avgCac": 77.39,
-            "marginalCac": 104.63,
-            "customers": 11
+            "days": 11,
+            "customers": 148,
+            "avgCac": 63.78,
+            "marginalCac": 207.17
           },
           {
             "spend": 973,
-            "avgCac": 83.83,
-            "marginalCac": 123.03,
-            "customers": 12
+            "days": 11,
+            "customers": 150,
+            "avgCac": 71.14,
+            "marginalCac": 621.5
           },
           {
             "spend": 1086,
-            "avgCac": 91.44,
-            "marginalCac": 144.77,
-            "customers": 12
+            "days": 11,
+            "customers": 150,
+            "avgCac": 79.83,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -21031,58 +21109,69 @@
         "level": "SOURCE_LINK",
         "category": "Prospecting — Broad",
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 63,
-        "ceiling": 117.07,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
-        "saturationSpend": 962,
+        "daysSampled": 80,
+        "ceiling": 105.08,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
+        "saturationSpend": 738,
+        "efficientSpend": 626,
+        "saturationReason": "MARGINAL_CAC_ABOVE_CEILING",
         "points": [
           {
             "spend": 291,
-            "avgCac": 59.09,
-            "marginalCac": 59.09,
-            "customers": 5
+            "days": 10,
+            "customers": 47,
+            "avgCac": 62.42,
+            "marginalCac": null
           },
           {
             "spend": 403,
-            "avgCac": 59.82,
-            "marginalCac": 61.19,
-            "customers": 7
+            "days": 10,
+            "customers": 64,
+            "avgCac": 63.42,
+            "marginalCac": 65.88
           },
           {
             "spend": 514,
-            "avgCac": 61.99,
-            "marginalCac": 67.38,
-            "customers": 8
+            "days": 10,
+            "customers": 77,
+            "avgCac": 66.38,
+            "marginalCac": 85.38
           },
           {
             "spend": 626,
-            "avgCac": 65.63,
-            "marginalCac": 77.78,
-            "customers": 10
+            "days": 10,
+            "customers": 88,
+            "avgCac": 71.35,
+            "marginalCac": 101.82
           },
           {
             "spend": 738,
-            "avgCac": 70.73,
-            "marginalCac": 92.36,
-            "customers": 10
+            "days": 10,
+            "customers": 94,
+            "avgCac": 78.31,
+            "marginalCac": 186.67
           },
           {
             "spend": 850,
-            "avgCac": 77.29,
-            "marginalCac": 111.1,
-            "customers": 11
+            "days": 10,
+            "customers": 97,
+            "avgCac": 87.26,
+            "marginalCac": 373.33
           },
           {
             "spend": 962,
-            "avgCac": 85.31,
-            "marginalCac": 134.02,
-            "customers": 11
+            "days": 10,
+            "customers": 98,
+            "avgCac": 98.2,
+            "marginalCac": 1120
           },
           {
             "spend": 1073,
-            "avgCac": 94.7,
-            "marginalCac": 160.84,
-            "customers": 11
+            "days": 10,
+            "customers": 98,
+            "avgCac": 111.01,
+            "marginalCac": null
           }
         ],
         "notes": []
@@ -21093,58 +21182,69 @@
         "level": "SOURCE_LINK",
         "category": "Search — Category KWs",
         "attributionModel": "FIRST_CLICK",
-        "daysSampled": 79,
-        "ceiling": 108.8,
-        "ceilingBasis": "REALIZED_LTV_90_DAYS",
+        "daysSampled": 64,
+        "ceiling": 110.51,
+        "ceilingBasis": "LTV_BREAKEVEN",
+        "ltvWindow": "90_days",
         "saturationSpend": null,
+        "efficientSpend": null,
+        "saturationReason": null,
         "points": [
           {
             "spend": 210,
-            "avgCac": 44.53,
-            "marginalCac": 44.53,
-            "customers": 5
+            "days": 8,
+            "customers": 36,
+            "avgCac": 46.45,
+            "marginalCac": null
           },
           {
             "spend": 291,
-            "avgCac": 45.52,
-            "marginalCac": 47.36,
-            "customers": 6
+            "days": 8,
+            "customers": 50,
+            "avgCac": 46.98,
+            "marginalCac": 46.29
           },
           {
             "spend": 371,
-            "avgCac": 48.44,
-            "marginalCac": 55.69,
-            "customers": 8
+            "days": 8,
+            "customers": 61,
+            "avgCac": 48.55,
+            "marginalCac": 58.18
           },
           {
             "spend": 452,
-            "avgCac": 53.35,
-            "marginalCac": 69.72,
-            "customers": 8
+            "days": 8,
+            "customers": 71,
+            "avgCac": 51.2,
+            "marginalCac": 64.8
           },
           {
             "spend": 533,
-            "avgCac": 60.23,
-            "marginalCac": 89.39,
-            "customers": 9
+            "days": 8,
+            "customers": 78,
+            "avgCac": 54.91,
+            "marginalCac": 92.57
           },
           {
             "spend": 613,
-            "avgCac": 68.97,
-            "marginalCac": 114.35,
-            "customers": 9
+            "days": 8,
+            "customers": 82,
+            "avgCac": 59.63,
+            "marginalCac": 160
           },
           {
             "spend": 694,
-            "avgCac": 79.78,
-            "marginalCac": 145.23,
-            "customers": 9
+            "days": 8,
+            "customers": 85,
+            "avgCac": 65.45,
+            "marginalCac": 216
           },
           {
             "spend": 775,
-            "avgCac": 92.55,
-            "marginalCac": 181.74,
-            "customers": 8
+            "days": 8,
+            "customers": 86,
+            "avgCac": 72.35,
+            "marginalCac": 648
           }
         ],
         "notes": []
@@ -21152,7 +21252,7 @@
     ]
   },
   "health": {
-    "checkedAt": "2026-09-15T16:41:33.444Z",
+    "checkedAt": "2026-09-15T20:10:06.646Z",
     "domains": [
       "scale-ecom.com",
       "shop.scale-ecom.com",
