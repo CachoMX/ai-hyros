@@ -52,8 +52,15 @@ HYROS docs (REST API v1.42, MCP v1.0, Webhooks v1.2).
   instead of failing the account.
 - Per-account failures are isolated: one bad ad account no longer fails
   the whole refresh.
-- Feature server steps get a fair share of the remaining refresh budget;
-  a skipped step keeps the previous block and marks it `stale`.
+- Feature server steps get a fair share of the remaining refresh budget
+  with a floor of min(60 s, what is left); the last step gets everything
+  left; a skipped step keeps the previous block and marks it `stale`. The
+  step's share is printed in the `steps` log (`feature health (72s)`).
+- `ctx.timeouts = { default: 15000, slow: 45000 }` for server steps; every
+  `ctx.callTool` / `ctx.callToolPaged*` clamps its timeout to what is left
+  of the step and the paged helpers stop at the step deadline by default,
+  so a feature can pass `ctx.timeouts.slow` to a tool known to be slow
+  without ever running past its share.
 - Attribution rows, sources and CRM lists are paginated within the refresh
   budget; the CRM shows "1,000+" when a list hit its cap.
 - HTTP 429 backs off using `Retry-After` and retries inside the deadline;

@@ -284,6 +284,33 @@ try {
   const staleBase = await buildSnapshot({ now: new Date('2026-09-16T12:00:00Z'), prefs, previous: { ...snap, generatedAt: '2026-09-15T12:00:00.000Z', crm: { ...snap.crm, sync: { ...snap.crm.sync, stale: true } } } });
   check('a stale (reused) CRM pulls from its real syncedAt, not the reuse time', String(calls.find((c) => c.name === 'hyros_get_leads')?.args.request.updatedFromDate || '').startsWith('2026-09-13') && staleBase.crm.sync.stale === undefined, JSON.stringify(calls.find((c) => c.name === 'hyros_get_leads')?.args.request));
 
+  console.log('\nFeature steps: fair share with a 60 s floor, the last step gets the rest, ctx.timeouts + clamped calls');
+  check('stepShareMs: 2 steps in 72.5 s -> 60 s floor; last step -> all 72.5 s; fair share wins when larger; floor never exceeds what is left', budget.stepShareMs(72500, 2) === 60000 && budget.stepShareMs(72500, 1) === 72500 && budget.stepShareMs(300000, 3) === 100000 && budget.stepShareMs(30000, 3) === 30000, JSON.stringify([budget.stepShareMs(72500, 2), budget.stepShareMs(72500, 1), budget.stepShareMs(300000, 3), budget.stepShareMs(30000, 3)]));
+  check('ctx.timeouts hints: default 15 s, slow 45 s (frozen)', budget.TIMEOUTS.default === 15000 && budget.TIMEOUTS.slow === 45000 && Object.isFrozen(budget.TIMEOUTS));
+  const featSteps = [];
+  // The mock's core + CRM take milliseconds, so the feature steps inherit
+  // nearly the whole budget: 100 s -> a 50 s fair share, raised to the floor.
+  const snapFeat = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, budgetMs: 100000, onProgress: (s) => featSteps.push(s) });
+  const shareOf = (id) => Number((featSteps.find((s) => s.startsWith(`feature ${id} (`)) || '').match(/\((\d+)s\)/)?.[1]);
+  check('scale gets the 60 s floor (not its 50 s fair share); health (last) gets everything left (~100 s)', shareOf('scale') === 60 && shareOf('health') >= 95 && snapFeat.health.scripts['https://mock.example.test/'] === 'SCRIPT_FOUND', JSON.stringify(featSteps.filter((s) => /^feature/.test(s))));
+  const fullSteps = [];
+  await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, onProgress: (s) => fullSteps.push(s) });
+  check('unspent core + CRM time flows to the features: on the full budget both steps get well over the floor', fullSteps.some((s) => /^feature scale \((\d+)s\)$/.test(s) && Number(s.match(/\((\d+)s\)/)[1]) >= 100), JSON.stringify(fullSteps.filter((s) => /^feature/.test(s))));
+  const { featureCtx } = await import('../api/_features.js');
+  const fctx = featureCtx({ id: 'health', manifest: { id: 'health' }, snapshot: snap, previous: null, deadline: Date.now() + 800 });
+  check('featureCtx exposes timeouts, timeLeft and the tool calls', fctx.timeouts.slow === 45000 && fctx.timeLeft() > 0 && fctx.timeLeft() <= 800 && typeof fctx.callTool === 'function' && typeof fctx.callToolPagedInfo === 'function', JSON.stringify(Object.keys(fctx)));
+  mock.latencyMs = { hyros_get_domains: 2500 };
+  const tClamp = Date.now();
+  const clamped = await fctx.callTool('hyros_get_domains', {}, { timeoutMs: fctx.timeouts.slow }).catch((e) => e);
+  const clampMs = Date.now() - tClamp;
+  check('a slow timeout is clamped to what is left of the step (never past its deadline, at least 1 s)', clamped?.code === 'timeout' && clampMs >= 900 && clampMs < 2000, JSON.stringify({ code: clamped?.code, clampMs }));
+  mock.reset();
+  const pctx = featureCtx({ id: 'health', manifest: { id: 'health' }, snapshot: snap, previous: null, deadline: Date.now() + 1 });
+  mock.pages('hyros_get_sales', 6, 250);
+  const pagedPast = await pctx.callToolPagedInfo('hyros_get_sales', { request: {} }, { maxPages: 6 });
+  check('ctx.callToolPagedInfo defaults its deadline to the step deadline', pagedPast.truncated === true && pagedPast.error === 'time budget', JSON.stringify(pagedPast));
+  mock.reset();
+
   console.log('\nFeature steps: stale reuse when the budget is spent');
   const snap3 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap, budgetMs: 0 });
   check('skipped step keeps the previous block, marked stale', snap3.health.stale === true && snap3.health.skipped === 'time budget' && snap3.health.domains.length === 2, JSON.stringify(Object.keys(snap3.health)));
