@@ -101,6 +101,18 @@ try {
   check('health: script presence per URL', snap.health.scripts['https://mock.example.test/'] === 'SCRIPT_FOUND');
   check('health: Google tracking params checked', snap.health.trackingParams.length === 2 && snap.health.trackingParams[0].rows.length === 2);
 
+  console.log('\nRate limit inside the range loop: warned, never blacklisted');
+  const KINDS = ['unsupported', 'rate_limited', 'error', 'truncated', 'time budget'];
+  check('every warning carries a documented kind', snap.warnings.every((w) => KINDS.includes(w.kind)), JSON.stringify(snap.warnings.map((w) => w.kind)));
+  check('no-level account is kind unsupported, broken account is kind error', snap.warnings.find((w) => w.adAccountId === '9006')?.kind === 'unsupported' && snap.warnings.filter((w) => w.adAccountId === '9007').every((w) => w.kind === 'error'));
+  calls.length = 0;
+  mock.failNext({ tool: 'hyros_get_attribution_report', status: 429, body: { error: LIMIT_MSG }, retryAfter: 0, times: 3 });
+  const snapRl = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs });
+  const rlWarn = snapRl.warnings.find((w) => w.kind === 'rate_limited');
+  check('rate-limited level lands in warnings with kind rate_limited + server text', rlWarn?.adAccountId === '9001' && /request limit/.test(rlWarn?.error || ''), JSON.stringify(snapRl.warnings));
+  check('rate-limited account is retried on the next range, not blacklisted', levelsFor('9001').length === 10 && snapRl.ranges['30d'].levels.account.some((r) => r.id === '9001'), String(levelsFor('9001').length));
+  mock.reset();
+
   console.log('\nIncremental build (previous snapshot present)');
   calls.length = 0;
   const snap2 = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, previous: snap });

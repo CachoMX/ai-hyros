@@ -402,16 +402,18 @@ export async function buildSnapshot({
   // One ad account failing (unsupported level, disconnected integration, …)
   // must not take the whole snapshot down: it is recorded in `warnings`,
   // skipped for the remaining ranges, and the other accounts still report.
+  // Every warning is { adAccountId, name, type, level, error, kind } with
+  // kind ∈ 'unsupported' | 'rate_limited' | 'error' | 'truncated' | 'time budget'.
   const warnings = [];
   const failed = new Set();
   const reported = new Set();
-  const warn = (acct, level, error) => {
-    warnings.push({ adAccountId: String(acct.id), name: acct.name || null, type: acct.type || null, level, error: String(error) });
-    onProgress(`skip ${acct.name || acct.id}: ${error}`);
+  const warn = (acct, level, error, kind = 'error') => {
+    warnings.push({ adAccountId: acct ? String(acct.id) : null, name: acct?.name || null, type: acct?.type || null, level, error: String(error), kind });
+    onProgress(`skip ${acct?.name || acct?.id || 'core'}: ${error}`);
   };
   const reportable = accounts.filter((acct) => {
     if (LEVELS_BY_TYPE[acct.type]) return true;
-    warn(acct, null, `no attribution report level for ad account type ${acct.type}`);
+    warn(acct, null, `no attribution report level for ad account type ${acct.type}`, 'unsupported');
     return false;
   });
   const fetchLevelSafe = async (acct, level, range) => {
@@ -424,8 +426,11 @@ export async function buildSnapshot({
       return rows;
     } catch (err) {
       if (err?.name === 'McpNotConfigured' || err?.code === 'auth') throw err;
+      // A 429 is the account's shared budget, not this level being broken:
+      // warn, and try again on the next range instead of blacklisting.
+      if (err?.code === 'rate_limited') { warn(acct, level, err.message, 'rate_limited'); return []; }
       failed.add(key);
-      warn(acct, level, err?.message || err);
+      warn(acct, level, err?.message || err, /unsupported level/i.test(err?.message || '') ? 'unsupported' : 'error');
       return [];
     }
   };
