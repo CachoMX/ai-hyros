@@ -62,6 +62,7 @@
           <p>Paste the API key from HYROS (<b>Settings → API</b>) and choose the password this dashboard will ask for from now on. The key is checked with HYROS, encrypted, and never shown again; the first snapshot builds right away.</p>
           <label class="setup-label" for="setupKey">HYROS API key</label>
           <input type="password" id="setupKey" placeholder="HYROS API key" autocomplete="off" spellcheck="false">
+          <p class="setup-hint">MCP access is enabled per account by HYROS support. If the key is rejected with a permission error, ask support to enable it.</p>
           <label class="acct-check"><input type="checkbox" id="setupAgency"> This is an agency key — add all my client accounts</label>
           <label class="setup-label" for="setupPw1">Dashboard password</label>
           <input type="password" id="setupPw1" placeholder="Password (8+ characters)" autocomplete="new-password" required>
@@ -78,6 +79,7 @@
           <h1>Connect your <b>HYROS account.</b></h1>
           <p>Paste the API key from HYROS (<b>Settings → API</b>). It is checked against HYROS, encrypted, and never shown again. The first snapshot builds right away — usually under a minute.</p>
           <input type="password" id="setupKey2" placeholder="HYROS API key" autocomplete="off" spellcheck="false" required>
+          <p class="setup-hint">MCP access is enabled per account by HYROS support. If the key is rejected with a permission error, ask support to enable it.</p>
           <label class="acct-check"><input type="checkbox" id="setupAgency2"> This is an agency key — add all my client accounts</label>
           <button class="primary" type="submit" style="width:100%" id="setupConnect2">Connect &amp; build my dashboard</button>
           <div class="gate-err" id="setupKeyErr" hidden></div>
@@ -117,6 +119,15 @@
           <h3>Pending secrets</h3>
           <p class="sub">Generated on first load and still stored in the database. Paste them into Vercel to harden.</p>
           <button type="button" id="secHardenOpen">Show the secrets</button>
+        </div>
+        <div class="setup-block">
+          <h3>Diagnostics</h3>
+          <p class="sub">Copies a small JSON — template version, setup state, storage, account count, the last refresh's steps and warnings, missing MCP tools. Never keys, passwords or emails. Paste it into a problem report.</p>
+          <div class="setup-actions">
+            <button type="button" id="copyDiag">Copy diagnostics</button>
+            <a id="reportProblem" class="setup-link" href="#" target="_blank" rel="noopener">Report a problem</a>
+          </div>
+          <div class="sub" id="diagStatus"></div>
         </div>
         <div class="setup-block danger">
           <h3>Factory reset</h3>
@@ -253,6 +264,7 @@
 
   <!-- CRM -->
   <section class="panel" id="view-crm" hidden>
+    <div id="crmNote"></div>
     <div class="controls">
       <div class="chipset" id="crmTabs"></div>
       <select id="stageFilter"><option value="">All stages</option></select>

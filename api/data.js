@@ -9,6 +9,7 @@
 import { checkAccess, deny } from './_auth.js';
 import { readSnapshot, readPrefs, storeConfigured } from './_store.js';
 import { accountFromReq } from './_accounts.js';
+import { TEMPLATE_VERSION } from './_version.js';
 
 export default async function handler(req, res) {
   const access = await checkAccess(req);
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   res.status(200).json({
     ok: true,
+    templateVersion: TEMPLATE_VERSION,
     origin,
     account,
     prefs,

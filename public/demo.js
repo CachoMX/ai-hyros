@@ -284,6 +284,11 @@ function buildCrm(seed) {
       { name: 'Lead', amount: 1240 }, { name: 'Opportunity', amount: 385 },
       { name: 'Customer', amount: 2210 }, { name: 'Churned', amount: 96 },
     ],
+    // Same shape as the live pipeline's crm.sync: the demo lists are complete and fresh.
+    sync: {
+      incremental: false, leadsFetched: leads.length, stale: false,
+      truncated: { leads: false, sales: false, calls: false, subscriptions: false },
+    },
     totals: {
       leads: leads.length,
       attributed: leads.length,

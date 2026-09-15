@@ -62,9 +62,15 @@ const state = {
   accounts: [],                   // from /api/accounts (ids + labels, never keys)
   setup: null,                    // /api/setup state: needs_storage | needs_setup | ready
   features: [],                   // loaded feature modules (public/features/<id>/), see FEATURES.md
+  templateVersion: null,          // from /api/data (the template this deployment runs)
+  health: null,                   // last /api/health answer (tool list check), for Setup & security
+  lastRefresh: null,              // last Refresh / first build outcome (steps, warnings, error) for diagnostics
 };
 
-const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs']);
+/* Where to report a problem with the template (the docs owner keeps this current). */
+const REPO_URL = 'https://github.com/zssai13/ai-hyros';
+
+const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs', '/api/health']);
 
 /* Demo mode caches: the real snapshot to restore, and both attribution views. */
 let realCache = null;
@@ -101,16 +107,62 @@ function persistColsLocal() {
  * Data access
  * ------------------------------------------------------------------ */
 
+/**
+ * Authenticated fetch. The password travels ONLY in the x-report-key header
+ * (never `?key=` — a URL lands in logs, history and shared links); the
+ * selected account id rides in the query for the account-scoped routes.
+ */
 async function api(path, opts = {}) {
   const url = new URL(path, location.origin);
-  if (state.key) url.searchParams.set('key', state.key);
   if (ACCOUNT_SCOPED.has(url.pathname) && state.account) {
     url.searchParams.set('account', state.account);
   }
-  const res = await fetch(url, opts);
+  const headers = { ...(opts.headers || {}), ...(state.key ? { 'x-report-key': state.key } : {}) };
+  const res = await fetch(url, { ...opts, headers });
   if (res.status === 401) throw new Error('unauthorized');
-  return { status: res.status, body: await res.json() };
+  try {
+    return { status: res.status, body: await res.json() };
+  } catch {
+    // Not JSON: Vercel's own error page when the function was killed (60 s)
+    // or a 5xx. Carry a code so the copy can say what to do.
+    throw Object.assign(new Error(`HTTP ${res.status} — the server did not answer with JSON`),
+      { code: res.status >= 500 ? 'timeout' : 'bad_response' });
+  }
 }
+
+/* ---------- failure copy: what to DO for each error code ---------- */
+
+const KEY_COPY = 'HYROS rejected that key — copy it again from HYROS → Settings → API.';
+const FAILURE_COPY = {
+  auth: KEY_COPY,
+  bad_key: KEY_COPY,
+  key_invalid: KEY_COPY,
+  forbidden: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).',
+  rate_limited: 'HYROS is rate-limiting this account; wait a minute and press Refresh.',
+  timeout: 'The build ran out of time (large account). Press Refresh again — the refresh is incremental.',
+  NOT_CONFIGURED: 'No HYROS API key is available for this account — check that storage is set up and add the account again from the account menu.',
+  not_configured: 'No HYROS account is connected yet — add one from the account menu.',
+  needs_storage: 'Storage is not set up yet — add the Upstash Redis store first (see the banner).',
+};
+/* Messages that mean "the function ran out of time / never answered", whatever the code. */
+const TIMEOUT_TEXT = /timed out|Failed to fetch|NetworkError|Unexpected token|did not answer with JSON|HTTP 5\d\d|FUNCTION_INVOCATION|<!doctype|<html/i;
+
+/**
+ * Actionable text for a failed API answer or a thrown error. Prefers the
+ * server's `code` (the MCP error code), then its `error`, then the message
+ * shape; falls back to the raw message. Plain text — callers escape it.
+ */
+function failureCopy(src, fallback = 'Unknown error') {
+  const code = src?.code || src?.error || '';
+  if (FAILURE_COPY[code]) return FAILURE_COPY[code];
+  const message = String(src?.message || fallback || '');
+  if (TIMEOUT_TEXT.test(message)) return FAILURE_COPY.timeout;
+  return message || fallback;
+}
+
+/** A key that HYROS rejected can be replaced in place — say so next to the copy. */
+const isKeyFailure = (src) => ['auth', 'bad_key', 'key_invalid'].includes(src?.code || src?.error || '');
+const replaceKeyHint = ' Open the account selector and use <b>Replace key</b>.';
 
 /** Placeholder snapshot for an account that has no build yet. */
 function emptySnapshot() {
@@ -126,15 +178,12 @@ function emptySnapshot() {
 async function load() {
   const { body } = await api('/api/data');
   state.origin = body.origin;
+  state.templateVersion = body.templateVersion || state.templateVersion;
   state.capabilities = body.capabilities || {};
   state.serverPrefs = body.prefs || null;
   if (body.account && !state.account) state.account = body.account;
   state.snapshot = body.snapshot || emptySnapshot();
-  if (state.snapshot.ranges?.[state.range]?.unavailable) {
-    const live = Object.keys(state.snapshot.ranges)
-      .find((k) => !state.snapshot.ranges[k].unavailable);
-    if (live) state.range = live;
-  }
+  pickValidRange();
 }
 
 /* ------------------------------------------------------------------ *
@@ -251,8 +300,16 @@ function showSetup(step, { overlay = false } = {}) {
 
 function hideSetup() { $('setup').hidden = true; $('setup').classList.remove('is-overlay'); }
 
+/**
+ * Re-read the setup state. Signed in, the password travels in the header so
+ * the full object (accounts, storeVia, secret sources) comes back; before
+ * sign-in the route answers only { state, storage, pendingSecrets }.
+ */
 async function refreshSetupState() {
-  try { const res = await fetch(`${location.origin}/api/setup`); state.setup = await res.json(); } catch { /* keep the old state */ }
+  try {
+    const res = await fetch(`${location.origin}/api/setup`, { headers: state.key ? { 'x-report-key': state.key } : {} });
+    state.setup = await res.json();
+  } catch { /* keep the old state */ }
   return state.setup;
 }
 
@@ -291,8 +348,8 @@ $('setupDemo').addEventListener('click', () => hideSetup());
 // First run: HYROS key + dashboard password in one step (the key is optional)
 async function runFirstSetup({ apiKey, agency, password }) {
   const res = await fetch(`${location.origin}/api/setup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'setup', password, apiKey, agency }) });
-  const body = await res.json();
-  if (!body.ok) throw new Error(body.message || body.error);
+  const body = await res.json().catch(() => ({ ok: false, code: res.status >= 500 ? 'timeout' : 'bad_response', message: `HTTP ${res.status}` }));
+  if (!body.ok) throw new Error(failureCopy(body));
   state.key = password;
   sessionStorage.setItem('aihyros_key', password);
   sessionStorage.setItem('aihyros_demo', '');
@@ -315,7 +372,7 @@ $('setupConnectForm').addEventListener('submit', async (e) => {
   if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
   btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
   try { await runFirstSetup({ apiKey, agency: $('setupAgency').checked, password: p1 }); $('setupKey').value = ''; }
-  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
   finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
 });
 $('setupSkipKey').addEventListener('click', async () => {
@@ -325,7 +382,7 @@ $('setupSkipKey').addEventListener('click', async () => {
   if (p1.length < 8) { err.hidden = false; err.textContent = 'Choose the dashboard password first (8+ characters).'; return; }
   if (p1 !== p2) { err.hidden = false; err.textContent = 'The two passwords differ.'; return; }
   try { await runFirstSetup({ apiKey: '', agency: false, password: p1 }); }
-  catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
 });
 
 // Connect a key later (banner / account menu), once signed in
@@ -337,7 +394,7 @@ $('setupKeyForm').addEventListener('submit', async (e) => {
   btn.disabled = true; btn.textContent = 'Checking the key with HYROS…';
   try {
     const { body } = await api('/api/accounts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey, agency: $('setupAgency2').checked }) });
-    if (!body.ok) { err.hidden = false; err.textContent = body.message || body.error; return; }
+    if (!body.ok) { err.hidden = false; err.textContent = failureCopy(body); return; }
     $('setupKey2').value = '';
     sessionStorage.setItem('aihyros_demo', '');
     state.account = body.account.id;
@@ -347,7 +404,7 @@ $('setupKeyForm').addEventListener('submit', async (e) => {
     await start();
     if (body.clientsFound > 0 && body.clientsApproved > 0) await importAgencyClients(body.account.id, body.account.label);
     if (state.setup?.pendingSecrets) showSetup('harden', { overlay: true });
-  } catch (ex) { err.hidden = false; err.textContent = ex.message; }
+  } catch (ex) { err.hidden = false; err.textContent = failureCopy(ex); }
   finally { btn.disabled = false; btn.textContent = 'Connect & build my dashboard'; }
 });
 $('setupSkipKey2').addEventListener('click', () => hideSetup());
@@ -382,22 +439,103 @@ $('setupHardenBtn').addEventListener('click', async () => {
 $('setupHardenLater').addEventListener('click', () => { hideSetup(); if ($('app').hidden) start(); });
 
 // Setup & security (from the account menu)
+const templateVersion = () => state.templateVersion || state.setup?.templateVersion || state.health?.templateVersion || null;
+
+/** What the tools/list check says, for the facts list. */
+function toolsFact() {
+  const h = state.health;
+  if (!state.accounts.length) return 'no account connected — nothing to check';
+  if (!h) return 'checking…';
+  if (h.error || !Array.isArray(h.missingTools)) return `could not check (${h.message || h.error || 'no answer'})`;
+  if (!h.missingTools.length) return `all ${h.toolCount ?? ''} present`.replace('all  present', 'all present');
+  return `${h.missingTools.length} missing: ${h.missingTools.join(', ')}`;
+}
+
 function renderSecurity() {
   const st = state.setup || {};
   const facts = [
+    ['Template version', templateVersion() || '—'],
     ['Storage', st.storage ? `connected (${st.storeVia})` : 'not set up'],
     ['Password', st.passwordSource === 'kv' ? `set on this dashboard${st.masterPassword ? ' (+ REPORT_PASSWORD master password in Vercel)' : ''}` : 'none'],
     ['Key encryption secret', st.keySecret === 'env' ? 'ACCOUNT_KEY_SECRET in Vercel' : st.keySecret === 'kv' ? 'generated, stored in the database' : 'none'],
     ['Daily refresh', st.cronSecret === 'env' ? 'signed (CRON_SECRET in Vercel)' : 'unsigned — once per hour at most; set CRON_SECRET to sign it'],
     ['HYROS MCP', st.mcpUrl || '—'],
+    ['MCP tools', toolsFact()],
     ['Accounts', String(st.accounts ?? state.accounts.length)],
   ];
   $('setupFacts').innerHTML = facts.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
   $('setupChangePw').hidden = st.passwordSource !== 'kv';
   $('secHardenBlock').hidden = !st.pendingSecrets;
+  $('reportProblem').href = `${REPO_URL}/issues`;
   $('changePwStatus').textContent = ''; $('resetStatus').textContent = ''; $('resetConfirm').value = ''; $('resetBtn').disabled = true;
+  $('diagStatus').textContent = '';
 }
-$('acctSetupBtn').addEventListener('click', async () => { $('acctPanel').hidden = true; await refreshSetupState(); showSetup('security'); });
+
+/** Ask /api/health which of the tools the app needs the key can see; re-render the facts when it answers. */
+async function loadHealth() {
+  if (!state.key || !state.accounts.length) { state.health = null; return; }
+  try {
+    const { body } = await api('/api/health');
+    state.health = body;
+  } catch (err) {
+    state.health = { ok: false, error: err.code || 'error', message: failureCopy(err) };
+  }
+  if (!$('setupSecurity').hidden) renderSecurity();
+}
+
+/* Anything that looks like an email is dropped from the diagnostics text, whatever field it came from. */
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * The diagnostics JSON: versions, states, counts, the last refresh's steps
+ * and warnings, missing tools. Never keys, passwords or emails — account
+ * labels are emails, so only ids and counts travel.
+ */
+function diagnostics() {
+  const st = state.setup || {};
+  const s = state.demo ? null : state.snapshot;
+  const out = {
+    templateVersion: templateVersion(),
+    at: new Date().toISOString(),
+    setup: st.state || null,
+    storeVia: st.storeVia || null,
+    pendingSecrets: Boolean(st.pendingSecrets),
+    accounts: state.accounts.length,
+    account: state.account || null,
+    demo: state.demo,
+    origin: state.origin,
+    snapshot: s ? {
+      schema: s.schema ?? null, generatedAt: s.generatedAt || null, templateVersion: s.templateVersion || null,
+      adAccounts: (s.adAccounts || []).length, sources: s.sourceCount ?? null, sourcesTruncated: Boolean(s.sourcesTruncated),
+      ranges: Object.fromEntries(Object.entries(s.ranges || {}).map(([k, r]) => [k, r?.skipped ? `skipped: ${r.skipped}` : (r?.unavailable ? 'unavailable' : 'ok')])),
+      crm: { leads: (s.crm?.leads || []).length, sync: s.crm?.sync || null },
+      warnings: (s.warnings || []).map((w) => ({ adAccountId: w.adAccountId, name: w.name, type: w.type, level: w.level, kind: w.kind, error: w.error })),
+      features: state.features.map((f) => ({ id: f.id, block: s[f.id] ? (s[f.id].error ? 'error' : s[f.id].skipped ? `skipped: ${s[f.id].skipped}` : 'ok') : 'absent' })),
+    } : null,
+    lastRefresh: state.lastRefresh,
+    missingTools: Array.isArray(state.health?.missingTools) ? state.health.missingTools : null,
+    health: state.health ? { ok: state.health.ok, toolCount: state.health.toolCount ?? null, error: state.health.error || null } : null,
+    userAgent: navigator.userAgent,
+  };
+  return JSON.stringify(out, null, 2).replace(EMAIL_RE, '<email>');
+}
+
+$('copyDiag').addEventListener('click', async () => {
+  const text = diagnostics();
+  const st = $('diagStatus');
+  const btn = $('copyDiag');
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied'; st.innerHTML = '';
+  } catch {
+    // No clipboard (http, permissions): show it for a manual copy.
+    st.innerHTML = 'Clipboard unavailable — copy it from here:<textarea class="diag-json" readonly></textarea>';
+    st.querySelector('textarea').value = text;
+  }
+  setTimeout(() => { btn.textContent = 'Copy diagnostics'; }, 1500);
+});
+
+$('acctSetupBtn').addEventListener('click', async () => { $('acctPanel').hidden = true; await refreshSetupState(); showSetup('security'); loadHealth(); });
 $('setupClose').addEventListener('click', hideSetup);
 $('secHardenOpen').addEventListener('click', () => showSetup('harden'));
 $('setupChangePw').addEventListener('submit', async (e) => {
@@ -446,12 +584,10 @@ function renderChrome() {
   $('acctLabel').textContent = state.demo ? 'Demo account'
     : (acct?.label || s.account?.email || 'No account');
   $('acctBtn').title = `${state.demo ? 'Synthetic demo data' : (s.adAccounts.map((a) => a.name).join(', ') || 'no ad accounts')} · ${s.sourceCount} sources · ${attr}`;
-  // Ad accounts the last build could not report (unsupported level, broken
-  // integration): one short line so a missing platform is never silent.
-  const skipped = state.demo ? [] : (s.warnings || []);
-  $('meta').innerHTML = skipped.length
-    ? `<span class="warn" title="${esc(skipped.map((w) => `${w.name || w.adAccountId}: ${w.error}`).join('\n'))}">${skipped.length} ad account${skipped.length === 1 ? '' : 's'} skipped: ${esc([...new Set(skipped.map((w) => w.name || w.adAccountId))].join(', '))}</span>`
-    : '';
+  // What the last build could not do — ad accounts skipped / rate limited /
+  // truncated / out of time, a truncated source list, ranges not fetched —
+  // one short line so nothing is silently missing; details in the tooltip.
+  $('meta').innerHTML = state.demo ? '' : buildWarningsLine(s);
   $('updated').textContent = s.generatedAt ? `Updated ${upd}` : 'Not built yet';
 
   const badge = $('originBadge');
@@ -483,6 +619,47 @@ function renderChrome() {
   $('setWrap').hidden = state.demo;
   renderFeatureTabs();
   renderSettingsSummary();
+}
+
+/* ---------- build warnings (snapshot.warnings[], sourcesTruncated, skipped ranges) ---------- */
+
+/* warning.kind -> the short word the header uses. Unknown kinds read as "skipped". */
+const WARNING_GROUPS = [
+  { key: 'skipped',      label: 'skipped',      kinds: ['unsupported', 'error'] },
+  { key: 'rate_limited', label: 'rate limited', kinds: ['rate_limited'] },
+  { key: 'truncated',    label: 'truncated',    kinds: ['truncated'] },
+  { key: 'time budget',  label: 'not fetched (time budget)', kinds: ['time budget'] },
+];
+const warningGroup = (w) => WARNING_GROUPS.find((g) => g.kinds.includes(w?.kind)) || WARNING_GROUPS[0];
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * One line, grouped by kind: "2 ad accounts skipped: A, B · 1 rate limited: C
+ * · sources list truncated · 1 range not fetched". Every detail goes in the
+ * title so the line itself stays short. Empty string when nothing is wrong.
+ */
+function buildWarningsLine(s) {
+  const warnings = Array.isArray(s?.warnings) ? s.warnings : [];
+  const parts = [];
+  const details = [];
+  for (const g of WARNING_GROUPS) {
+    const ws = warnings.filter((w) => warningGroup(w) === g);
+    if (!ws.length) continue;
+    const names = [...new Set(ws.map((w) => w.name || w.adAccountId || 'ad account'))];
+    parts.push(`${plural(names.length, 'ad account')} ${g.label}: ${names.join(', ')}`);
+    details.push(...ws.map((w) => `${w.name || w.adAccountId || 'ad account'}${w.level ? ` (${w.level})` : ''}: ${w.error || g.label}`));
+  }
+  if (s?.sourcesTruncated) {
+    parts.push('sources list truncated');
+    details.push('hyros_get_sources returned more sources than were fetched — ad sets past the cap roll up as Uncategorised / Unknown.');
+  }
+  const skippedRanges = Object.values(s?.ranges || {}).filter((r) => r?.skipped);
+  if (skippedRanges.length) {
+    parts.push(`${plural(skippedRanges.length, 'range')} not fetched (${skippedRanges.map((r) => r.label).join(', ')})`);
+    details.push(...skippedRanges.map((r) => `${r.label}: not fetched this refresh (${r.skipped}) — press Refresh again.`));
+  }
+  if (!parts.length) return '';
+  return `<span class="warn" title="${esc(details.join('\n'))}">${esc(parts.join(' · '))}</span>`;
 }
 
 /* ---------- report settings (attribution model / window / stage ranking) ---------- */
@@ -687,6 +864,7 @@ function openReplaceKey(id) {
 async function switchAccount(id) {
   if (state.demo) setDemo(false, { silent: true });
   if (id === state.account && state.origin !== 'none') return;
+  const previous = state.account;
   state.account = id;
   localStorage.setItem('aihyros_account', id);
   state.path = [];
@@ -700,7 +878,13 @@ async function switchAccount(id) {
     $('reportNote').innerHTML = '';
     if (state.origin === 'none') firstBuild();
   } catch (err) {
-    note(`Could not load this account: ${esc(err.message)}`, true);
+    // The table still shows the previous account, so the selector must too.
+    state.account = previous;
+    if (previous) localStorage.setItem('aihyros_account', previous); else localStorage.removeItem('aihyros_account');
+    renderChrome();
+    if (!$('acctPanel').hidden) renderAcctPanel();
+    const label = state.accounts.find((x) => x.id === id)?.label || id;
+    note(`Could not load <b>${esc(label)}</b>: ${esc(failureCopy(err))} Still showing the previous account.`, true);
   }
 }
 
@@ -712,9 +896,9 @@ async function firstBuild() {
   btn.disabled = true; btn.textContent = 'Building…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    recordRefresh(body, 'first build');
     if (!body.ok) {
-      const hint = body.error === 'key_invalid' ? ' Open the account selector and use <b>Replace key</b>.' : '';
-      note(`First build failed: ${esc(body.message || body.error)}${hint}`, true);
+      note(`First build failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
       await loadAccounts();
       return;
     }
@@ -722,9 +906,10 @@ async function firstBuild() {
     await loadAccounts();
     pickValidRange();
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
-    note(`Built in ${(body.ms / 1000).toFixed(1)}s.` + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+    note(`Built in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
   } catch (err) {
-    note(`First build failed: ${esc(err.message)}`, true);
+    recordRefresh({ ok: false, code: err.code, message: err.message }, 'first build');
+    note(`First build failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = state.demo; btn.textContent = 'Refresh';
   }
@@ -784,7 +969,7 @@ $('acctForm').addEventListener('submit', async (e) => {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(replaceId ? { action: 'replace-key', id: replaceId, apiKey } : { apiKey, agency }),
     });
-    if (!body.ok) { $('acctStatus').className = 'sub err'; $('acctStatus').textContent = body.message || body.error; return; }
+    if (!body.ok) { $('acctStatus').className = 'sub err'; $('acctStatus').textContent = failureCopy(body); return; }
     $('acctKey').value = '';
     await loadAccounts();
     if (replaceId) {
@@ -804,7 +989,7 @@ $('acctForm').addEventListener('submit', async (e) => {
     await refreshSetupState(); renderSetupBanner();
     switchAccount(account.id);
   } catch (err) {
-    $('acctStatus').className = 'sub err'; $('acctStatus').textContent = err.message;
+    $('acctStatus').className = 'sub err'; $('acctStatus').textContent = failureCopy(err);
   } finally { btn.disabled = false; }
 });
 
@@ -915,10 +1100,12 @@ function resetStageFilter() {
   state.crm.stage = '';
 }
 
+const rangeUsable = (r) => Boolean(r) && !r.unavailable && !r.skipped;
+
 function pickValidRange() {
   const ranges = state.snapshot.ranges || {};
-  if (!ranges[state.range] || ranges[state.range].unavailable) {
-    const ok = Object.keys(ranges).find((k) => !ranges[k].unavailable);
+  if (!rangeUsable(ranges[state.range])) {
+    const ok = Object.keys(ranges).find((k) => rangeUsable(ranges[k]));
     if (ok) state.range = ok;
   }
 }
@@ -1002,24 +1189,52 @@ $('refreshBtn').addEventListener('click', async () => {
   btn.textContent = 'Refreshing…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    recordRefresh(body, 'refresh');
     if (body.ok) {
       await load();
       renderChrome(); renderRangeChips(); renderReport(); renderCrm();
-      note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.`
-        + (body.persisted ? '' : ' Not persisted — KV is not configured.'), !body.persisted);
+      note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
     } else {
-      note(`Refresh failed: ${esc(body.message || body.error)}`, true);
+      note(`Refresh failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
     }
   } catch (err) {
-    note(`Refresh failed: ${esc(err.message)}`, true);
+    recordRefresh({ ok: false, code: err.code, message: err.message }, 'refresh');
+    note(`Refresh failed: ${esc(failureCopy(err))}`, true);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Refresh';
   }
 });
 
+/** Keep the last refresh outcome (for Copy diagnostics): steps, timing, code — never the snapshot itself. */
+function recordRefresh(body, kind) {
+  state.lastRefresh = {
+    kind, at: new Date().toISOString(), account: state.account || null,
+    ok: Boolean(body?.ok), ms: body?.ms ?? null, persisted: body?.persisted ?? null,
+    code: body?.ok ? null : (body?.code || body?.error || null),
+    message: body?.ok ? null : (body?.message || null),
+    steps: Array.isArray(body?.steps) ? body.steps.slice(-40) : null,
+    counts: body?.counts || null,
+  };
+}
+
 function note(msg, isErr) {
   $('reportNote').innerHTML = `<div class="note${isErr ? ' err' : ''}">${msg}</div>`;
+}
+
+/**
+ * Why a refresh answered persisted:false. "KV is not configured" only when
+ * the store really is absent (the response's own flag, else what /api/data
+ * and /api/setup said); with a store present the write itself failed —
+ * almost always a snapshot over the store's value limit.
+ */
+function persistNote(body) {
+  if (body?.persisted) return '';
+  const storage = body?.storeConfigured ?? body?.storage
+    ?? (body?.storeVia ? true : undefined)
+    ?? state.capabilities?.storeConfigured ?? state.setup?.storage;
+  if (storage === false || /KV is not configured/i.test(String(body?.warning || ''))) return ' Not persisted — KV is not configured.';
+  return ' Snapshot too large to store — see the account menu.';
 }
 
 /* ------------------------------------------------------------------ *
@@ -1236,10 +1451,13 @@ function renderCrumbs() {
 
 function renderRangeChips() {
   const ranges = state.snapshot.ranges || {};
+  const title = (r) => (r.skipped ? `Not fetched this refresh (${r.skipped}) — press Refresh again`
+    : r.unavailable ? 'Not in this snapshot yet — press Refresh'
+      : `${r.start} → ${r.end}`);
   $('rangeChips').innerHTML = Object.entries(ranges).map(([key, r]) => `
     <button class="chip ${key === state.range ? 'active' : ''}"
-            data-range="${key}" ${r.unavailable ? 'disabled' : ''}
-            title="${r.unavailable ? 'Not in the baked seed snapshot — Refresh with live credentials' : `${r.start} → ${r.end}`}">
+            data-range="${key}" ${r.unavailable || r.skipped ? 'disabled' : ''}
+            title="${esc(title(r))}">
       ${esc(r.label)}
     </button>`).join('');
 
@@ -1259,7 +1477,7 @@ $('hideZero').addEventListener('change', (e) => { state.hideZero = e.target.chec
 
 function currentRows() {
   const block = state.snapshot.ranges?.[state.range];
-  if (!block || block.unavailable) return null;
+  if (!block || block.unavailable || block.skipped) return null;
   let rows = effectiveLevels(block)[state.level] || [];
   if (state.search) rows = rows.filter((r) =>
     `${r.name ?? ''} ${r.parentName ?? ''} ${r.id}`.toLowerCase().includes(state.search));
@@ -1297,9 +1515,11 @@ function renderReport() {
 
   if (!rows) {
     $('reportKpis').innerHTML = '';
-    $('reportTable').innerHTML =
-      `<tbody><tr><td class="empty">This range is not in the baked seed snapshot.<br>
-       Set <code>HYROS_MCP_URL</code> + <code>HYROS_API_KEY</code> and hit Refresh to load it live.</td></tr></tbody>`;
+    $('reportTable').innerHTML = `<tbody><tr><td class="empty">${block?.skipped
+      ? `This range was not fetched this refresh (${esc(block.skipped)}).<br>Press <b>Refresh</b> again — the refresh is incremental.`
+      : state.origin === 'none'
+        ? 'The first snapshot has not been built yet.'
+        : 'No data for this range yet — press <b>Refresh</b>.'}</td></tr></tbody>`;
     $('reportCount').textContent = '';
     updateHProxy();
     return;
@@ -1702,12 +1922,14 @@ function recordRows(kind) {
 
 function renderCrmTabs() {
   const crm = state.snapshot.crm || {};
+  const count = (kind) => (Array.isArray(crm[kind]) ? `${fmt.int(crm[kind].length)}${crmTruncated(kind) ? '+' : ''}` : '?');
   const counts = {
-    leads: (crm.leads || []).length,
-    sales: Array.isArray(crm.sales) ? crm.sales.length : '?',
-    calls: Array.isArray(crm.calls) ? crm.calls.length : '?',
-    subscriptions: Array.isArray(crm.subscriptions) ? crm.subscriptions.length : '?',
+    leads: count('leads'),
+    sales: count('sales'),
+    calls: count('calls'),
+    subscriptions: count('subscriptions'),
   };
+  renderCrmNote();
   $('crmTabs').innerHTML = CRM_TABS.map((t) => `
     <button class="chip ${state.crm.tab === t.key ? 'active' : ''}" data-tab="${t.key}">
       ${t.label} <span class="chip-count">${counts[t.key]}</span>
@@ -1720,12 +1942,55 @@ function renderCrmTabs() {
   $('attrFilter').hidden = !leadsOnly;
 }
 
+/**
+ * KPI tiles. Every field is TEXT and is escaped here — features hand in raw
+ * names (an ad name as `sub`, say), so this is the one place that makes them
+ * safe. `cls` is limited to the two money tones.
+ */
 function kpiTiles(list) {
-  return list.map((k) => `<div class="kpi">
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value ${k.cls || ''}">${k.value}</div>
-      <div class="kpi-sub">${k.sub || ''}</div>
+  const tone = (cls) => (cls === 'good' || cls === 'bad' ? cls : '');
+  return list.map((k) => `<div class="kpi"${k.title ? ` title="${esc(k.title)}"` : ''}>
+      <div class="kpi-label">${esc(k.label)}</div>
+      <div class="kpi-value ${tone(k.cls)}">${esc(k.value)}</div>
+      <div class="kpi-sub">${esc(k.sub || '')}</div>
     </div>`).join('');
+}
+
+/* ---------- CRM list caps (crm.sync.truncated.<kind>) and carry-over (crm.sync.stale) ---------- */
+
+/** True when the MCP had more <kind> rows than the refresh fetched (the list is capped). */
+const crmTruncated = (kind) => Boolean(state.snapshot?.crm?.sync?.truncated?.[kind]);
+const crmTotal = (kind) => (Array.isArray(state.snapshot?.crm?.[kind]) ? state.snapshot.crm[kind].length : 0);
+
+/** "1,000+ leads (newest 1,000 shown)" on a capped list; "12 of 1,000+ leads (…)" once filtered. */
+function crmCountText(kind, shown) {
+  if (!crmTruncated(kind)) return `${fmt.int(shown)} ${kind}`;
+  const cap = fmt.int(crmTotal(kind));
+  return `${shown === crmTotal(kind) ? '' : `${fmt.int(shown)} of `}${cap}+ ${kind} (newest ${cap} shown)`;
+}
+
+/** Tooltip for a KPI that sums over a capped list; empty when the list is complete. */
+function capTitle(...kinds) {
+  const capped = kinds.filter(crmTruncated);
+  if (!capped.length) return '';
+  return `based on the first ${capped.map((k) => `${fmt.int(crmTotal(k))} ${k}`).join(' and ')} rows — the list was capped`;
+}
+
+/** The CRM note: carried-over CRM and capped lists, said once above the table. */
+function renderCrmNote() {
+  const sync = state.snapshot?.crm?.sync || {};
+  const bits = [];
+  if (sync.stale) {
+    bits.push('<b>CRM from the previous refresh.</b> The last refresh ran out of time before the CRM, '
+      + 'so these leads, sales, calls and subscriptions are the previous snapshot’s.');
+  }
+  const capped = CRM_TABS.filter((t) => sync.truncated?.[t.key])
+    .map((t) => `${t.label.toLowerCase()} (newest ${fmt.int(crmTotal(t.key))} shown)`);
+  if (capped.length) {
+    bits.push(`<b>Capped lists:</b> ${esc(capped.join(', '))} — HYROS had more rows than this refresh fetched, `
+      + 'so the totals on those tabs cover only the rows shown.');
+  }
+  $('crmNote').innerHTML = bits.length ? `<div class="note">${bits.join(' ')}</div>` : '';
 }
 
 function attachCrmSort() {
@@ -1792,12 +2057,13 @@ function renderCrmLeads() {
   const income = rows.reduce((s, l) => s + (l.income || 0), 0);
   const attributed = rows.filter((l) => l.hasAttribution).length;
 
+  const cap = capTitle('leads');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Leads in view', value: fmt.int(rows.length) },
-    { label: 'Attributed', value: fmt.int(attributed),
+    { label: 'Leads in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Attributed', value: fmt.int(attributed), title: cap,
       sub: rows.length ? `${((attributed / rows.length) * 100).toFixed(0)}% have a click source` : '' },
-    { label: 'Customers', value: fmt.int(rows.filter((l) => l.stage === 'Customer').length) },
-    { label: 'Income', value: fmt.money(income), sub: 'joined from sales by email' },
+    { label: 'Customers', value: fmt.int(rows.filter((l) => l.stage === 'Customer').length), title: cap },
+    { label: 'Income', value: fmt.money(income), sub: 'joined from sales by email', title: capTitle('leads', 'sales') },
     { label: 'Account total', value: fmt.int((crm.stages || []).reduce((s, x) => s + x.amount, 0)),
       sub: 'leads across all stages' },
   ]);
@@ -1819,7 +2085,7 @@ function renderCrmLeads() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(CRM_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No leads match this filter.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} leads`;
+  $('crmCount').textContent = crmCountText('leads', rows.length);
   attachCrmSort();
 }
 
@@ -1840,12 +2106,13 @@ function renderCrmSales() {
   if (rows === null) return needsRefresh('Sales');
 
   const revenue = rows.reduce((s, x) => s + (x.amount || 0), 0);
+  const cap = capTitle('sales');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Sales in view', value: fmt.int(rows.length) },
-    { label: 'Revenue', value: fmt.money(revenue), cls: revenue ? 'good' : '' },
-    { label: 'AOV', value: fmt.money(rows.length ? revenue / rows.length : null) },
-    { label: 'Refunded', value: fmt.int(rows.filter((x) => x.refunded).length) },
-    { label: 'Recurring', value: fmt.int(rows.filter((x) => x.recurring).length) },
+    { label: 'Sales in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Revenue', value: fmt.money(revenue), cls: revenue ? 'good' : '', title: cap },
+    { label: 'AOV', value: fmt.money(rows.length ? revenue / rows.length : null), title: cap },
+    { label: 'Refunded', value: fmt.int(rows.filter((x) => x.refunded).length), title: cap },
+    { label: 'Recurring', value: fmt.int(rows.filter((x) => x.recurring).length), title: cap },
   ]);
 
   const body = rows.map((x) => `<tr>
@@ -1863,7 +2130,7 @@ function renderCrmSales() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(SALES_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No sales in this snapshot window.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} sales`;
+  $('crmCount').textContent = crmCountText('sales', rows.length);
   attachCrmSort();
 }
 
@@ -1884,12 +2151,13 @@ function renderCrmCalls() {
 
   const qualified = rows.filter((x) => x.qualified).length;
   const attributed = rows.filter((x) => x.firstSource || x.lastSource).length;
+  const cap = capTitle('calls');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Calls in view', value: fmt.int(rows.length) },
-    { label: 'Qualified', value: fmt.int(qualified),
+    { label: 'Calls in view', value: fmt.int(rows.length), title: cap },
+    { label: 'Qualified', value: fmt.int(qualified), title: cap,
       sub: rows.length ? `${((qualified / rows.length) * 100).toFixed(0)}% of calls` : '' },
-    { label: 'Attributed', value: fmt.int(attributed), sub: 'call carries a click source' },
-    { label: 'From ads', value: fmt.int(rows.filter((x) => x.ad).length), sub: 'specific ad known' },
+    { label: 'Attributed', value: fmt.int(attributed), sub: 'call carries a click source', title: cap },
+    { label: 'From ads', value: fmt.int(rows.filter((x) => x.ad).length), sub: 'specific ad known', title: cap },
   ]);
 
   const stateCls = (st) => (st === 'QUALIFIED' ? 'stage' : st === 'NO_SHOW' || st === 'CANCELLED' ? 'warn' : '');
@@ -1907,7 +2175,7 @@ function renderCrmCalls() {
   $('crmTable').innerHTML = rows.length
     ? `${headRow(CALLS_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No booked calls in this snapshot window.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} calls`;
+  $('crmCount').textContent = crmCountText('calls', rows.length);
   attachCrmSort();
 }
 
@@ -1926,12 +2194,13 @@ function renderCrmSubs() {
   if (rows === null) return needsRefresh('Subscriptions');
 
   const active = rows.filter((x) => x.status === 'ACTIVE' || x.status === 'TRIALING');
+  const cap = capTitle('subscriptions');
   $('crmKpis').innerHTML = kpiTiles([
-    { label: 'Subscriptions', value: fmt.int(rows.length) },
-    { label: 'Active / trialing', value: fmt.int(active.length) },
-    { label: 'Canceled', value: fmt.int(rows.filter((x) => x.status === 'CANCELED').length) },
+    { label: 'Subscriptions', value: fmt.int(rows.length), title: cap },
+    { label: 'Active / trialing', value: fmt.int(active.length), title: cap },
+    { label: 'Canceled', value: fmt.int(rows.filter((x) => x.status === 'CANCELED').length), title: cap },
     { label: 'Active value', value: fmt.money(active.reduce((s, x) => s + (x.price || 0), 0)),
-      sub: 'sum of active plan prices' },
+      sub: 'sum of active plan prices', title: cap },
   ]);
 
   const body = rows.map((x) => `<tr>
@@ -1948,7 +2217,7 @@ function renderCrmSubs() {
     ? `${headRow(SUBS_COLUMNS)}<tbody>${body}</tbody>`
     : `<tbody><tr><td class="empty">No subscriptions tracked in this account’s snapshot window —
        the tab is wired to <code>hyros_get_subscriptions</code> and will populate when they exist.</td></tr></tbody>`;
-  $('crmCount').textContent = `${rows.length} subscriptions`;
+  $('crmCount').textContent = crmCountText('subscriptions', rows.length);
   attachCrmSort();
 }
 
@@ -1960,9 +2229,14 @@ $('crmSearch').addEventListener('input', (e) => { state.crm.search = e.target.va
  * CSV
  * ------------------------------------------------------------------ */
 
+/* A text cell starting with one of these is a formula to Excel/Sheets (CSV injection via an ad or lead name). */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
 function toCsv(headers, records) {
   const cell = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
+    if (v === null || v === undefined) return '';
+    // Numbers are never formulas; only text gets the guard (so -12.5 stays a number).
+    const s = typeof v === 'number' ? String(v) : `${FORMULA_START.test(String(v)) ? "'" : ''}${String(v)}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [headers.map(cell).join(','), ...records.map((r) => r.map(cell).join(','))].join('\n');

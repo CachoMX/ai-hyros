@@ -7,6 +7,29 @@ import { listTools, callTool, mcpUrl } from './_mcp.js';
 import { storeConfigured, storeCredentials } from './_store.js';
 import { accountFromReq, asAccount } from './_accounts.js';
 import { setupState } from './_setup.js';
+import { TEMPLATE_VERSION } from './_version.js';
+
+/**
+ * Every MCP tool the dashboard calls (core pipeline, drill, Scale Advisor,
+ * Tracking Health). `missingTools` in the answer lists the ones the key's
+ * tools/list does not expose — a tab that stays empty usually traces to one
+ * of these.
+ */
+export const REQUIRED_TOOLS = [
+  'hyros_get_user_info', 'hyros_get_ad_accounts', 'hyros_get_sources',
+  'hyros_get_attribution_report', 'hyros_get_leads', 'hyros_get_sales',
+  'hyros_get_calls', 'hyros_get_subscriptions', 'hyros_get_stages',
+  'hyros_get_lead_journey', 'hyros_get_lead_clicks', 'hyros_get_domains',
+  'hyros_assert_script_presence_on_domain',
+  'hyros_check_tracking_parameters_for_integrations',
+  'hyros_get_marginal_cac_curve',
+];
+
+/** The required tools absent from a tools/list answer (names only). */
+export function missingTools(names) {
+  const have = new Set(Array.isArray(names) ? names : []);
+  return REQUIRED_TOOLS.filter((t) => !have.has(t));
+}
 
 export default async function handler(req, res) {
   const access = await checkAccess(req);
@@ -16,6 +39,7 @@ export default async function handler(req, res) {
   const accountId = await accountFromReq(req);
   const out = {
     ok: true,
+    templateVersion: TEMPLATE_VERSION,
     setup: setup.state,
     mcpUrl: mcpUrl(),
     account: accountId,
@@ -37,6 +61,7 @@ export default async function handler(req, res) {
       const tools = await listTools();
       out.toolCount = tools.length;
       out.hasAttributionTool = tools.includes('hyros_get_attribution_report');
+      out.missingTools = missingTools(tools);
 
       const user = await callTool('hyros_get_user_info', {});
       out.accountEmail = user?.userProfile?.email || null;

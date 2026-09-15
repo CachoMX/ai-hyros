@@ -11,8 +11,11 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TEMPLATE_VERSION } from '../api/_version.js';
 
-const ROOT = new URL('../public/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows the pathname is "/C:/…", which join() mangles into a 404 for every file.
+const ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.gif': 'image/gif', '.woff2': 'font/woff2' };
 
 const dev = {
@@ -36,7 +39,14 @@ const setupState = () => ({
   cronSecret: dev.password ? (dev.pendingSecrets ? 'kv' : 'env') : null, pendingSecrets: dev.pendingSecrets,
   accounts: dev.accounts.filter((a) => a.kind !== 'client').length, envKey: false, mcpUrl: 'https://mcp.hyros.com/mcp', createdAt: null,
 });
-const authed = (url) => !dev.password || url.searchParams.get('key') === dev.password;
+/* Like _auth.js: the x-report-key header, a Bearer token, or (legacy) ?key=. The app itself only sends the header. */
+const signedIn = (url, req) => {
+  if (!dev.password) return false;
+  const bearer = String(req?.headers?.authorization || '').startsWith('Bearer ') ? req.headers.authorization.slice(7) : null;
+  return [req?.headers?.['x-report-key'], bearer, url.searchParams.get('key')].some((c) => c === dev.password);
+};
+/* Routes stay open until a password exists (the first-run screen needs them); after that, the password. */
+const authed = (url, req) => !dev.password || signedIn(url, req);
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve({}); } }); });
 
@@ -46,8 +56,13 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/setup') {
     if (req.method === 'GET') {
       const out = setupState();
+      // Like api/setup.js: before sign-in (or before a password exists) only what the page needs to pick a screen.
+      if (!signedIn(url, req)) {
+        if (url.searchParams.get('secrets')) return json(res, 401, { ok: false, error: 'unauthorized' });
+        return json(res, 200, { ok: true, state: out.state, storage: out.storage, pendingSecrets: out.pendingSecrets });
+      }
+      out.templateVersion = TEMPLATE_VERSION;
       if (url.searchParams.get('secrets')) {
-        if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
         out.secrets = dev.pendingSecrets ? { ACCOUNT_KEY_SECRET: 'dev-generated-account-key-secret-0123456789abcdef', CRON_SECRET: 'dev-generated-cron-secret-0123456789abcdef' } : { ACCOUNT_KEY_SECRET: null, CRON_SECRET: null };
       }
       return json(res, 200, out);
@@ -58,7 +73,9 @@ const server = createServer(async (req, res) => {
       if (dev.password) return json(res, 409, { ok: false, error: 'exists', message: 'This dashboard is already set up.' });
       if (String(body.password || '').length < 8) return json(res, 400, { ok: false, error: 'weak', message: 'Use at least 8 characters.' });
       const key = String(body.apiKey || '').trim();
-      if (key === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+      // Same body shape as api/setup.js errorBody(): error (legacy), code (the MCP error code), message, detail.
+      if (key === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', code: 'auth', message: 'HYROS rejected that key — copy it again from HYROS → Settings → API.', detail: 'MCP rejected the API key (HTTP 401)' });
+      if (key === 'mcp-off-key-000') return json(res, 403, { ok: false, error: 'bad_key', code: 'forbidden', message: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).', detail: 'hyros_get_user_info: MCP is not enabled for this account' });
       if (key && key.length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
       dev.accounts = []; dev.password = body.password; dev.pendingSecrets = true; dev.state = 'ready';
       let added = {};
@@ -68,22 +85,22 @@ const server = createServer(async (req, res) => {
       }
       return json(res, 200, { ...setupState(), ...added });
     }
-    if (!authed(url)) return json(res, 401, { ok: false, error: 'unauthorized' });
+    if (!authed(url, req)) return json(res, 401, { ok: false, error: 'unauthorized' });
     if (body.action === 'harden') { dev.pendingSecrets = false; return json(res, 200, { ok: true, done: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true }, remaining: { ACCOUNT_KEY_SECRET: false, CRON_SECRET: false }, envSet: { ACCOUNT_KEY_SECRET: true, CRON_SECRET: true } }); }
     if (body.action === 'change-password') { dev.password = body.password; return json(res, 200, setupState()); }
     if (body.action === 'reset') { dev.accounts = []; dev.password = null; dev.pendingSecrets = false; dev.state = 'needs_setup'; return json(res, 200, { ok: true, deleted: 7, ...setupState() }); }
     return json(res, 400, { ok: false, error: 'bad_request' });
   }
 
-  if (url.pathname.startsWith('/api/') && !authed(url)) return json(res, 401, { ok: false, error: dev.password ? 'unauthorized' : 'setup_required' });
+  if (url.pathname.startsWith('/api/') && !authed(url, req)) return json(res, 401, { ok: false, error: dev.password ? 'unauthorized' : 'setup_required' });
 
   if (url.pathname === '/api/data') {
     const account = url.searchParams.get('account') || dev.accounts.find((a) => a.kind !== 'client')?.id || null;
     const acct = dev.accounts.find((a) => a.id === account);
-    if (!acct || !acct.lastRefresh) return json(res, 200, { ok: true, origin: 'none', account, prefs: null, capabilities: { mcpConfigured: Boolean(account), storeConfigured: true }, snapshot: null });
+    if (!acct || !acct.lastRefresh) return json(res, 200, { ok: true, templateVersion: TEMPLATE_VERSION, origin: 'none', account, prefs: null, capabilities: { mcpConfigured: Boolean(account), storeConfigured: true }, snapshot: null });
     const seed = JSON.parse(await readFile(new URL('../data/seed.json', import.meta.url), 'utf8'));
     seed.origin = 'kv';
-    return json(res, 200, { ok: true, origin: 'kv', account, prefs: null, capabilities: { mcpConfigured: true, storeConfigured: true }, snapshot: seed });
+    return json(res, 200, { ok: true, templateVersion: TEMPLATE_VERSION, origin: 'kv', account, prefs: null, capabilities: { mcpConfigured: true, storeConfigured: true }, snapshot: seed });
   }
   if (url.pathname === '/api/drill') {
     return json(res, 200, { ok: false, error: 'dev', message: 'Dev server has no MCP — drill-downs need a deployed API. Demo mode drills work.' });
@@ -97,7 +114,8 @@ const server = createServer(async (req, res) => {
     if (body.action === 'replace-key') return json(res, 200, { ok: true, account: dev.accounts.find((a) => a.id === body.id) });
     if (body.action === 'import-clients') return json(res, 200, { ok: true, added: 0, total: 0, offset: 0, remaining: 0, pending: 0 });
     if (String(body.apiKey || '').length < 8) return json(res, 400, { ok: false, error: 'bad_key', message: 'That does not look like a HYROS API key.' });
-    if (body.apiKey === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', message: 'HYROS rejected that key: MCP rejected the API key (HTTP 401)' });
+    if (body.apiKey === 'dead-key-000') return json(res, 400, { ok: false, error: 'bad_key', code: 'auth', message: 'HYROS rejected that key — copy it again from HYROS → Settings → API.', detail: 'MCP rejected the API key (HTTP 401)' });
+    if (body.apiKey === 'mcp-off-key-000') return json(res, 403, { ok: false, error: 'bad_key', code: 'forbidden', message: 'The key is valid but this account cannot use the MCP. Ask HYROS support to enable MCP access for it (it is granted per account).', detail: 'hyros_get_user_info: MCP is not enabled for this account' });
     const id = `acc_${Buffer.from(body.apiKey).toString('hex').slice(0, 12).padEnd(12, '0')}`;
     const account = { id, kind: 'key', label: 'you@yourbrand.test', email: 'you@yourbrand.test', status: 'APPROVED', keyStatus: 'ok', agency: Boolean(body.agency), lastRefresh: null };
     dev.accounts = [...dev.accounts.filter((a) => a.id !== id), account]; dev.state = 'ready';
@@ -111,7 +129,10 @@ const server = createServer(async (req, res) => {
     acct.lastRefresh = new Date().toISOString();
     return json(res, 200, { ok: true, account, persisted: true, ms: 1200, steps: ['dev: served the synthetic seed'], generatedAt: acct.lastRefresh });
   }
-  if (url.pathname === '/api/health') return json(res, 200, { ok: true, setup: dev.state, dev: true });
+  if (url.pathname === '/api/health') {
+    // The real route lists which of the 15 required tools the key cannot see; the stub pretends two are absent.
+    return json(res, 200, { ok: true, setup: dev.state, dev: true, templateVersion: TEMPLATE_VERSION, toolCount: 13, hasAttributionTool: true, missingTools: ['hyros_get_lead_journey', 'hyros_get_lead_clicks'] });
+  }
 
   const rel = url.pathname === '/' ? 'index.html' : normalize(url.pathname).replace(/^(\.\.[/\\])+/, '').replace(/^\//, '');
   try {
