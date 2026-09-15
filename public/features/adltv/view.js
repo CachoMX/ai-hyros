@@ -62,7 +62,7 @@ export function render(ctx) {
       followed for 2 months after the click — plus the other traffic sources those same customers
       clicked along the way, and which of them closed the most calls. Window: ${esc(d.window?.start)} → ${esc(d.window?.end)}.${status}</div>
     <div class="kpis">${kpis([
-      { label: 'Highest 60-day LTV', value: fmt.money(topAd.ltv60), cls: 'good', sub: esc(topAd.name) },
+      { label: 'Highest 60-day LTV', value: fmt.money(topAd.ltv60), cls: 'good', sub: topAd.name },
       { label: 'Avg LTV growth (60d)', value: `${avgMult.toFixed(2)}×`, sub: 'vs first-purchase AOV, top 5 ads' },
       { label: 'Customers followed', value: fmt.int(totCustomers), sub: 'created by the top 5 ads' },
       { label: 'Closed calls via assists', value: fmt.int(totAssistCalls), sub: 'booked & closed through other sources' },

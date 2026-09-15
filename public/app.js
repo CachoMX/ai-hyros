@@ -507,7 +507,7 @@ function diagnostics() {
     snapshot: s ? {
       schema: s.schema ?? null, generatedAt: s.generatedAt || null, templateVersion: s.templateVersion || null,
       adAccounts: (s.adAccounts || []).length, sources: s.sourceCount ?? null, sourcesTruncated: Boolean(s.sourcesTruncated),
-      ranges: Object.fromEntries(Object.entries(s.ranges || {}).map(([k, r]) => [k, r?.skipped ? `skipped: ${r.skipped}` : (r?.unavailable ? 'unavailable' : 'ok')])),
+      ranges: Object.fromEntries(Object.entries(s.ranges || {}).map(([k, r]) => [k, r?.skipped ? `skipped: ${r.skipped}` : 'ok'])),
       crm: { leads: (s.crm?.leads || []).length, sync: s.crm?.sync || null },
       warnings: (s.warnings || []).map((w) => ({ adAccountId: w.adAccountId, name: w.name, type: w.type, level: w.level, kind: w.kind, error: w.error })),
       features: state.features.map((f) => ({ id: f.id, block: s[f.id] ? (s[f.id].error ? 'error' : s[f.id].skipped ? `skipped: ${s[f.id].skipped}` : 'ok') : 'absent' })),
@@ -646,7 +646,10 @@ function buildWarningsLine(s) {
     const ws = warnings.filter((w) => warningGroup(w) === g);
     if (!ws.length) continue;
     const names = [...new Set(ws.map((w) => w.name || w.adAccountId || w.level || 'snapshot'))];
-    parts.push(`${plural(names.length, 'ad account')} ${g.label}: ${names.join(', ')}`);
+    const accountOnly = ws.every((w) => w.adAccountId);
+    parts.push(accountOnly
+      ? `${plural(names.length, 'ad account')} ${g.label}: ${names.join(', ')}`
+      : `${g.label}: ${names.join(', ')}`);
     details.push(...ws.map((w) => `${w.name || w.adAccountId || w.level || 'snapshot'}${w.level ? ` (${w.level})` : ''}: ${w.error || g.label}`));
   }
   if (s?.sourcesTruncated) {
@@ -1100,7 +1103,7 @@ function resetStageFilter() {
   state.crm.stage = '';
 }
 
-const rangeUsable = (r) => Boolean(r) && !r.unavailable && !r.skipped;
+const rangeUsable = (r) => Boolean(r) && !r.skipped;
 
 function pickValidRange() {
   const ranges = state.snapshot.ranges || {};
@@ -1452,11 +1455,11 @@ function renderCrumbs() {
 function renderRangeChips() {
   const ranges = state.snapshot.ranges || {};
   const title = (r) => (r.skipped ? `Not fetched this refresh (${r.skipped}) — press Refresh again`
-    : r.unavailable ? 'Not in this snapshot yet — press Refresh'
-      : `${r.start} → ${r.end}`);
+
+    : `${r.start} → ${r.end}`);
   $('rangeChips').innerHTML = Object.entries(ranges).map(([key, r]) => `
     <button class="chip ${key === state.range ? 'active' : ''}"
-            data-range="${key}" ${r.unavailable || r.skipped ? 'disabled' : ''}
+            data-range="${key}" ${r.skipped ? 'disabled' : ''}
             title="${esc(title(r))}">
       ${esc(r.label)}
     </button>`).join('');
@@ -1477,7 +1480,7 @@ $('hideZero').addEventListener('change', (e) => { state.hideZero = e.target.chec
 
 function currentRows() {
   const block = state.snapshot.ranges?.[state.range];
-  if (!block || block.unavailable || block.skipped) return null;
+  if (!block || block.skipped) return null;
   let rows = effectiveLevels(block)[state.level] || [];
   if (state.search) rows = rows.filter((r) =>
     `${r.name ?? ''} ${r.parentName ?? ''} ${r.id}`.toLowerCase().includes(state.search));
@@ -1830,6 +1833,9 @@ function renderJourney(j, origin) {
       </div>
     </div>`).join('');
 
+  const clicksNote = j.clicksError && !(j.clicks || []).length
+    ? `<div class="drawer-section">Click history</div><div class="sub">Click history could not be fetched: ${esc(j.clicksError)}</div>`
+    : '';
   const clicks = (j.clicks || []).length ? `
     <div class="drawer-section">Click history · ${j.clicks.length} tracked clicks</div>
     <div class="clicks">${j.clicks.map((c) => `
@@ -1846,7 +1852,7 @@ function renderJourney(j, origin) {
   $('drawerBody').innerHTML = `
     <div class="drawer-section">Journey</div>
     <div class="timeline">${timeline || '<div class="empty">No journey events.</div>'}</div>
-    ${clicks}`;
+    ${clicksNote}${clicks}`;
 }
 
 $('drawerBack').addEventListener('click', () => {

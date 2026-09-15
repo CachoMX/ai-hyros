@@ -45,7 +45,7 @@ function viewCtx(id, block, extra = {}) {
     seen,
     id, manifest: { id, name: id, description: 'd' }, root: stubRoot(), snapshot: snap, block,
     demo: true, account: null, range: '30d', level: 'campaign', fmt, esc,
-    kpis: (list) => { seen.push(...list); return list.map((k) => `<div class="kpi">${k.label}: ${k.value} ${k.sub || ''}</div>`).join(''); },
+    kpis: (list) => { seen.push(...list); return list.map((k) => `<div class="kpi">${esc(k.label)}: ${esc(k.value)} ${esc(k.sub || '')}</div>`).join(''); }, // like app.js kpiTiles: escaped text
     formatCell, note: () => {}, openJourney: () => {}, api: async () => ({ status: 200, body: {} }), selectView: () => {},
     ...extra,
   };
@@ -250,7 +250,7 @@ console.log('\nTemplate, Funnel, Ad LTV: block states');
   const a = viewCtx('adltv', evil);
   const aErr = renders(renderAdltv, a);
   const sub = a.seen.find((k) => k.label === 'Highest 60-day LTV')?.sub || '';
-  check('adltv: KPI sub (top ad name) is escaped', !aErr && sub.includes('&lt;img') && !sub.includes('<img'), aErr?.message || sub);
+  check('adltv: KPI sub is passed raw (kpis() escapes it) and renders escaped', !aErr && sub === 'Top <img src=x onerror=alert(1)>' && a.root.innerHTML.includes('&lt;img') && !a.root.innerHTML.includes('<img'), aErr?.message || sub);
   for (const blk of [{ error: 'boom' }, { skipped: 'time budget' }, {}]) {
     const c = viewCtx('adltv', blk);
     const err = renders(renderAdltv, c);
