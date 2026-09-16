@@ -24,6 +24,12 @@ export const calls = [];
 /** A tool-level failure: the dispatcher turns it into an isError reply, like the real MCP. */
 class ToolError extends Error {}
 
+/** The live MCP wants every tool's arguments under `request`; flat arguments are rejected. */
+const journeyEmails = (request, flat) => {
+  if (!request && flat) throw new ToolError('hyros_get_lead_journey: Missing required property: request');
+  return request?.emails || [];
+};
+
 /**
  * Test controls. Everything resets with `mock.reset()`.
  *   mock.failNext({ tool, status, body, retryAfter, times })  HTTP-level failure(s) for the next call(s)
@@ -166,7 +172,7 @@ const TOOLS = {
   hyros_get_sales: () => ({ result: SALES, nextPageId: null }),
   hyros_get_calls: () => ({ result: [], nextPageId: null }),
   hyros_get_subscriptions: () => ({ result: [], nextPageId: null }),
-  hyros_get_lead_journey: ({ emails }) => (emails || []).map((email) => ({
+  hyros_get_lead_journey: ({ request, emails }) => journeyEmails(request, emails).map((email) => ({
     lead: lead(1, '2026-09-02T10:00:00-05:00', '2026-09-02T10:00:00-05:00'),
     sales: SALES.filter((s) => s.lead.email === email), calls: [], journey: [{ type: 'click', date: '2026-09-02T10:00:00-05:00', name: 'Prospecting Broad' }],
   })),

@@ -108,7 +108,9 @@ async function liveJourney(email) {
   const fromDate = new Date(Date.now() - CLICKS_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 19);
   // The clicks call is best-effort: a failure must not blank the journey.
   const [journeyRes, clicksRes] = await Promise.allSettled([
-    callTool('hyros_get_lead_journey', { emails: [email], includeEvents: true }),
+    // Every MCP tool takes its arguments inside `request` (the live server
+    // answers "Missing required property: request" otherwise).
+    callTool('hyros_get_lead_journey', { request: { emails: [email], includeEvents: true } }),
     // Docs: `email` is deprecated in favour of `emails`; `fromDate` bounds the search.
     callTool('hyros_get_lead_clicks', { request: { emails: [email], fromDate, pageSize: 100 } }),
   ]);
@@ -116,7 +118,8 @@ async function liveJourney(email) {
   const journeys = journeyRes.value;
   const clicksBody = clicksRes.status === 'fulfilled' ? clicksRes.value : null;
   const clicksError = clicksRes.status === 'rejected' ? String(clicksRes.reason?.message || clicksRes.reason) : null;
-  const j = Array.isArray(journeys) ? journeys[0] : null;
+  const list = Array.isArray(journeys) ? journeys : (journeys?.result || journeys?.journeys || []);
+  const j = Array.isArray(list) ? list[0] : null;
   if (!j) return null;
   return {
     ...(clicksError ? { clicksError } : {}),
