@@ -1,23 +1,29 @@
 # Setting up AI HYROS with Claude — context + walkthrough
 
-*Give this file to Claude together with the app zip. It tells Claude what
-you are trying to do, what the app is, where you are, and what "done" looks
-like at each step. The path is always the same: **unzip → your own GitHub
-repo → Vercel → storage → connect screen.** Claude drives; you do the
-clicks in HYROS, GitHub and Vercel that only a human can do.*
+*This file is the setup script. The user pastes the prompt below into
+Claude Code; Claude copies the public template into the user's own GitHub
+repo, then walks them through Vercel, storage and the connect screen. The
+path is always the same: **empty repo → template copied in → Vercel →
+storage → connect screen.** Claude drives; the user does the clicks in
+GitHub, Vercel and HYROS that only a human can do.*
 
 ---
 
 ## Paste this as your first message
 
-> I was given the AI HYROS dashboard app as a zip and unzipped it into this
-> folder. It is not on git yet; I want it in my own GitHub repo, deployed
-> on my own Vercel account, connected to my HYROS account. Read
-> `SETUP-WITH-CLAUDE.md` first, then `CLAUDE.md` and `README.md`. Walk me
-> through the setup one step at a time. I am at step **___** (say "0" if
-> you are starting). Before each step tell me what it does and what I will
-> need to do myself; after each step verify it worked before moving on.
-> Do not skip ahead.
+> I want my own copy of the AI HYROS dashboard, deployed on my own Vercel
+> account and connected to my HYROS account. The template is the public
+> repo `https://github.com/Hyros-AI/hyros-ai`. My own empty GitHub repo is
+> `https://github.com/________/________`. First copy the template into my
+> repo (fetch it with git and push to mine — keep the git history so I can
+> pull updates later). Then read `SETUP-WITH-CLAUDE.md`, `CLAUDE.md` and
+> `README.md` and walk me through the rest one step at a time. Before each
+> step tell me what it does and what I must do myself; after each step
+> verify it worked before moving on. Do not skip ahead. Never ask me for my
+> HYROS API key or my password — they only go into the app's own setup
+> screen.
+
+Fill in your repo URL. If you already did some steps, add "I am at step N".
 
 ---
 
@@ -41,86 +47,95 @@ clicks in HYROS, GitHub and Vercel that only a human can do.*
 
 ## What Claude can and cannot do here
 
-- **Can**: read and explain the code, run `npm run check` and the local
-  dev server, initialise git and write the commands to push, tell you
-  exactly which buttons to click in GitHub/Vercel/HYROS, and verify each
-  step by asking you for a URL and reading `https://<your-url>/api/setup`
-  (a public JSON status: `needs_storage` → `needs_setup` → `ready`).
-- **Cannot**: click inside HYROS, GitHub or Vercel, or see your API key.
-  Never paste the HYROS API key or the password into the chat — they go
-  into the app's setup screen only.
+- **Can**: run git (fetch the template, push to the user's repo), read and
+  explain the code, run `npm run check`, tell the user exactly which
+  buttons to click in GitHub / Vercel / HYROS, and verify each step by
+  asking for the app URL and reading `https://<url>/api/setup` — a public
+  JSON status that moves `needs_storage` → `needs_setup` → `ready`.
+- **Cannot**: click inside HYROS, GitHub or Vercel, or see the API key.
+  The user must never paste the HYROS API key or the password into the
+  chat — they go into the app's setup screen only. If they do paste one,
+  tell them to rotate it (HYROS → Settings → API) and do not store it.
+
+## Claude Code on the web vs on your computer
+
+Both work. The steps are the same; only step 1 differs slightly.
+
+| | **claude.ai/code (web)** — recommended if you are not technical | **Claude Code on your computer** |
+|---|---|---|
+| Where the repo lives | You open your empty GitHub repo in the session; it is already checked out | Claude clones it into a folder; needs `git` and a GitHub login (`gh auth login`) |
+| Local preview (`node scripts/devserver.mjs`) | not available — skip anything marked *local only* | works |
+| Verifying `/api/setup` | Claude fetches the URL; if the sandbox blocks it, paste the JSON you see in the browser | Claude fetches the URL |
 
 ---
 
 ## The steps
 
 Each step has a **Goal**, **You do**, **Claude does**, and **Done when**.
-Tell Claude which step you are on; it should confirm the previous step's
-"done when" before continuing.
+Claude confirms the previous step's "done when" before continuing.
 
-### Step 0 — Unpack and look around
-- **Goal**: Claude has the app in front of it and knows the rules.
-- **You do**: unzip `ai-hyros.zip` — it contains one folder, `ai-hyros/`.
-  Open that folder in Claude Code (or upload it to the chat). It is a plain
-  folder, not a git checkout: there is no history and no remote yet.
-- **Claude does**: reads `CLAUDE.md`, `README.md`; runs `npm run check`
-  (needs Node 20+; nothing to install) and reports "all checks pass".
-- **Done when**: checks pass. Optional: `node scripts/devserver.mjs`,
-  open `http://127.0.0.1:4321`, password `dev`, look at the Demo account.
+### Step 0 — Your empty GitHub repo
+- **Goal**: a repo you own for Vercel to deploy from.
+- **You do**: on github.com → **New repository** → name it (e.g.
+  `hyros-ai`), private is fine, **do not** tick "Add a README",
+  ".gitignore" or "license" — leave it completely empty. Copy its URL.
+  Then open Claude Code (web: pick this repo when starting the session;
+  computer: open an empty folder) and paste the prompt above with your
+  repo URL filled in.
+- **Claude does**: nothing yet — this is the human's step.
+- **Done when**: the prompt is sent and Claude has the repo URL.
 
-### Step 1 — Get the HYROS API key (and optionally connect the HYROS MCP to Claude)
+### Step 1 — Copy the template into your repo (Claude does this)
+- **Goal**: your repo contains the app, with the template's git history,
+  so updates later are a plain merge.
+- **You do**: nothing, unless git asks you to log in to GitHub.
+- **Claude does**, in the checkout of the user's repo (web: the session
+  folder; computer: `git clone <user repo url>` first, or `git init` in an
+  empty folder and `git remote add origin <user repo url>`):
+  ```
+  git remote add upstream https://github.com/Hyros-AI/hyros-ai.git
+  git fetch upstream
+  git checkout -b master upstream/master      # repo is empty (the normal case)
+  git push -u origin master
+  ```
+  If the user's repo already has a commit (they ticked "Add a README"),
+  replace the `checkout` line with
+  `git merge upstream/master --allow-unrelated-histories`; it will report
+  an add/add conflict on `README.md` — take the template's copy
+  (`git checkout upstream/master -- README.md && git add README.md &&
+  git commit -m "Copy AI HYROS template"`) and push the current branch.
+  Then run `npm run check` (Node 20+, nothing to install) and report "all
+  checks pass". Do not squash, re-init or copy
+  files by hand — the shared history is what makes `git merge upstream/master`
+  work in step 7.
+- **Done when**: on GitHub the user's repo shows `api/`, `public/`,
+  `vercel.json` and `package.json` at the top level (not inside a
+  subfolder), and `npm run check` passes. *Local only, optional*:
+  `node scripts/devserver.mjs` → `http://127.0.0.1:4321`, password `dev`,
+  look at the Demo account.
+
+### Step 2 — Get the HYROS API key
 - **Goal**: you hold the key the app will use.
 - **You do**: in HYROS go to **Settings → API** and copy your API key.
-  Keep it somewhere safe; you will paste it into the app in step 5.
-  **MCP access is enabled per account by HYROS support** — it is not
-  self-serve and there is nothing to switch on in the HYROS app. If you
-  are not sure your account has it, ask support before step 5; a key from
-  an account without it is rejected at setup with a permission hint.
-  *Optional*: connect the **HYROS MCP** connector to Claude (claude.ai →
-  Settings → Connectors) so Claude can sanity-check the account
-  (`hyros_get_user_info`, ad accounts) — this is a convenience for
-  troubleshooting, the dashboard itself does not need it.
+  Keep it somewhere safe; you will paste it into the app in step 5. Do not
+  paste it into this chat.
 - **Claude does**: explains what the key unlocks (read access to reports,
-  leads, sales, calls), and if the connector is attached, confirms the
-  account email and how many ad accounts it sees.
+  leads, sales, calls). If the HYROS MCP connector is attached to Claude,
+  it can confirm the account email and ad-account count as a sanity check
+  (`hyros_get_user_info`) — optional, the dashboard does not need it.
 - **Done when**: you have the key. Agency? Note whether you will tick
   "agency key" in step 5 — it pulls in every client account you can access.
-
-### Step 2 — Put the app in your own GitHub repo
-- **Goal**: Vercel deploys from a git repo you own. The zip is the whole
-  app; nothing is pulled from anyone else's repo.
-- **You do**: on github.com create a new **empty** repo (private is fine),
-  e.g. `<you>/ai-hyros`. Do not tick "add a README" or ".gitignore" — the
-  zip already has them.
-- **Claude does** (inside the unzipped `ai-hyros/` folder; needs git and a
-  GitHub login on your machine — `gh auth login` or a saved credential):
-  ```
-  git init
-  git add -A
-  git commit -m "AI HYROS dashboard"
-  git branch -M main
-  git remote add origin https://github.com/<you>/ai-hyros.git
-  git push -u origin main
-  ```
-  No git on the machine? Alternative: on the empty repo page click
-  **"uploading an existing file"** and drag in the CONTENTS of `ai-hyros/`
-  (not the folder itself). Afterwards check on GitHub that `api/`,
-  `public/`, `vercel.json`, `package.json` and `.gitignore` are there; the
-  web uploader sometimes drops dot-files, and `.claude/` (Claude skills)
-  is optional.
-- **Done when**: the repo on GitHub shows `api/`, `public/` and
-  `vercel.json` at the top level (not inside an extra folder).
 
 ### Step 3 — Deploy to Vercel
 - **Goal**: the app is live at a `*.vercel.app` URL.
 - **You do**: vercel.com → **Add New → Project** → **Import** the GitHub
-  repo you just created (connect your GitHub account to Vercel if asked).
-  Settings: Framework preset **Other**, leave Build Command empty, Output
-  Directory **`public`**, Root Directory `./`. No environment variables.
-  Click **Deploy**.
-- **Claude does**: waits for your URL, then reads
-  `https://<url>/api/setup`. It expects `"state":"needs_storage"` — the
-  store is added next.
+  repo from step 1 (connect your GitHub account to Vercel if asked).
+  Leave every setting as Vercel shows it — `vercel.json` already sets the
+  framework (none) and the output directory (`public`). No environment
+  variables. Click **Deploy**, then copy the deployment URL and paste it
+  here.
+- **Claude does**: reads `https://<url>/api/setup` and expects
+  `"state":"needs_storage"` — the store is added next.
 - **Done when**: the URL loads and shows the Demo dashboard under a
   "Storage needs to be set up" card. That is correct; go to step 4.
 
@@ -143,17 +158,16 @@ Tell Claude which step you are on; it should confirm the previous step's
 
 ### Step 5 — Enter the API key and choose the password
 - **Goal**: the dashboard is yours.
-- **You do**: on the app's connect screen, paste the HYROS API key, tick
-  "agency key" if it is one, type a password twice, click **Connect &
-  build my dashboard**. The key is checked with HYROS first (a bad key
-  changes nothing), then everything is stored and the first snapshot
-  builds — usually a minute or two, up to 5 minutes on a large account.
-- **Claude does**: reads `/api/setup` and expects `"state":"ready"` (the
-  account count is only returned once signed in with the password, in the
-  `x-report-key` header). Asks you whether the report shows your ad
-  accounts and the badge reads **Live**.
-- **Done when**: you see your own numbers. Do this promptly after the
-  deploy: the connect screen is first-come.
+- **You do**: open your app URL **now** (the connect screen is
+  first-come). Paste the HYROS API key, tick "agency key" if it is one,
+  type a password twice, click **Connect & build my dashboard**. The key
+  is checked with HYROS first (a bad key changes nothing), then everything
+  is stored and the first snapshot builds — usually a minute or two, up to
+  5 minutes on a large account.
+- **Claude does**: reads `/api/setup` and expects `"state":"ready"`. Asks
+  you whether the report shows your ad accounts and the badge reads
+  **Live**.
+- **Done when**: you see your own numbers.
 
 ### Step 6 — Optional: lock it down, add accounts
 - **Hardening** (optional): the last setup screen shows two generated
@@ -166,11 +180,18 @@ Tell Claude which step you are on; it should confirm the previous step's
   limited to once per hour; with it, signed.
 - **Start over**: account menu → Setup & security → type `RESET`.
 
-### Step 7 — Next: build on it
-- Ask Claude to read `FEATURES.md` and use `/add-feature`. Every tab is a
-  folder under `public/features/<id>/`; `npm run check` enforces the
-  contract; `node scripts/feature-pack.mjs <id>` exports a feature for
-  another fork.
+### Step 7 — Later: updates and new features
+- **Updates**: the template moves on; your repo keeps the `upstream`
+  remote from step 1, so bringing in a new version is one prompt to
+  Claude — *"Pull the latest AI HYROS template from upstream, resolve any
+  conflicts, and push"* — which runs
+  `git fetch upstream && git merge upstream/master && git push`. Vercel
+  redeploys on push. If the dashboard then says "old snapshot — needs a
+  Refresh", press **Refresh**.
+- **Features**: ask Claude to read `FEATURES.md` and use `/add-feature`.
+  Every tab is a folder under `public/features/<id>/`; `npm run check`
+  enforces the contract; `node scripts/feature-pack.mjs <id>` exports a
+  feature for another fork.
 
 ---
 
@@ -178,8 +199,8 @@ Tell Claude which step you are on; it should confirm the previous step's
 
 ```
 Step:            ___
+My GitHub repo:  https://github.com/________/________
 App URL:         https://________________.vercel.app
-GitHub repo:     https://github.com/________/ai-hyros
 Agency key?:     yes / no
 Last /api/setup: { state: "________" }
 Blocked on:      ________________________________
@@ -189,9 +210,11 @@ Blocked on:      ________________________________
 
 | Symptom | Likely cause | What Claude should do |
 |---|---|---|
-| `/api/setup` returns 404 | functions not deployed — usually the repo has an extra top-level folder (`ai-hyros/ai-hyros/…`) | either move the files up on GitHub, or set Vercel → Settings → General → Root Directory to that folder; redeploy |
-| still `needs_storage` after adding the store | no redeploy, or store connected to another project/env | Storage → database → Projects; redeploy |
+| `git push` rejected / asks for login | no GitHub credential on the machine | computer: `gh auth login` and retry; web: the session must have been opened on that repo |
+| `git merge` says "refusing to merge unrelated histories" | the repo was not empty (README commit) or was set up from a zip | `git merge upstream/master --allow-unrelated-histories`; on the `README.md` add/add conflict take the template's copy (`git checkout upstream/master -- README.md`), commit, push |
+| `/api/setup` returns 404 | functions not deployed — usually the files are inside an extra top-level folder | move the files up (they must be at the repo root), or set Vercel → Settings → General → Root Directory to that folder; redeploy |
+| still `needs_storage` after adding the store | no redeploy, or store connected to another project/env, or "Redis" (Redis Cloud) was picked instead of Upstash | Storage → database → Projects; make sure it is Upstash for Redis; redeploy |
 | "HYROS rejected that key" | key mistyped or copied from the wrong account | copy again from HYROS Settings → API; nothing was stored |
-| "the key is valid but MCP access is not enabled" (permission error) | MCP access is granted per account by HYROS support | ask HYROS support to enable MCP on the account, then retry; nothing was stored |
+| "the key is valid but MCP access is not enabled" | MCP is granted per account by HYROS | ask HYROS support to enable MCP on the account, then retry; nothing was stored |
 | first build times out | very large account | press Refresh again; the lead sync is incremental and every refresh keeps what the previous one fetched |
 | sign-in screen instead of connect screen on a fresh deploy | an older deployment already set a password in this store | Setup & security → RESET (or `REPORT_PASSWORD` in Vercel as a master password if locked out) |

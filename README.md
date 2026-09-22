@@ -2,7 +2,7 @@
 
 Your HYROS **Performance Report**, **CRM / Leads**, **Scale Advisor** and
 **Tracking Health** as a standalone dashboard, built entirely on the HYROS MCP.
-You get it as a zip, put it in your own GitHub repo, deploy it to your own
+You copy this repo into your own GitHub account, deploy it to your own
 Vercel account, and the first load walks you through your HYROS API key
 and a password. A **Demo account** is always there to explore before (or
 without) connecting anything.
@@ -41,14 +41,18 @@ are listed in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Set up in five steps
 
-1. **Your GitHub repo.** Unzip, create an empty repo on GitHub, push the
-   contents of the `ai-hyros/` folder to it (`git init && git add -A &&
-   git commit -m "AI HYROS" && git branch -M main && git remote add origin
-   <your repo> && git push -u origin main`). `api/`, `public/` and
-   `vercel.json` must sit at the top level of the repo.
-2. **Vercel.** vercel.com → Add New → Project → import that repo.
-   Framework preset *Other*, no build command, output directory `public`.
-   Deploy. The URL opens on the Demo account with a "Storage needs to be
+1. **Your GitHub repo.** Create an empty repo on GitHub (no README), then
+   copy this template into it keeping the history:
+   ```bash
+   git clone <your empty repo> && cd <repo>
+   git remote add upstream https://github.com/Hyros-AI/hyros-ai.git
+   git fetch upstream && git checkout -b master upstream/master
+   git push -u origin master
+   ```
+   `api/`, `public/` and `vercel.json` must sit at the top level.
+2. **Vercel.** vercel.com → Add New → Project → import that repo. Leave
+   the settings as shown (`vercel.json` sets framework and output
+   directory). Deploy. The URL opens on the Demo account with a "Storage needs to be
    set up" card — expected.
 3. **Storage — Upstash for Redis.** Vercel → the project → **Storage** →
    Create Database → **Upstash for Redis** (from the Vercel marketplace,
@@ -222,14 +226,17 @@ averaged.
 Your deployment is your own copy of the template, so updates are a git
 merge:
 
-- Add the template repository as a remote once, then merge whenever a new
-  version ships; Vercel redeploys on push:
+- The `upstream` remote added at setup points at the template; merge
+  whenever a new version ships and Vercel redeploys on push:
   ```bash
-  git remote add upstream https://github.com/zssai13/ai-hyros
   git fetch upstream
-  git merge upstream/HEAD
+  git merge upstream/master
   git push
   ```
+  (Missing the remote? `git remote add upstream
+  https://github.com/Hyros-AI/hyros-ai.git`. Installed from a zip or a
+  fresh `git init`, so the histories are unrelated? Add
+  `--allow-unrelated-histories` to the first merge.)
 - Feature folders you added under `public/features/` and your entry in
   `registry.js` merge cleanly; conflicts only arise in files you edited.
 - When the snapshot `schema` number changes, the dashboard shows "old
