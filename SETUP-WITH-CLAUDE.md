@@ -11,19 +11,27 @@ GitHub, Vercel and HYROS that only a human can do.*
 
 ## Paste this as your first message
 
-> I want my own copy of the AI HYROS dashboard, deployed on my own Vercel
-> account and connected to my HYROS account. The template is the public
-> repo `https://github.com/Hyros-AI/hyros-ai`. My own empty GitHub repo is
-> `https://github.com/________/________`. First copy the template into my
-> repo (fetch it with git and push to mine — keep the git history so I can
-> pull updates later). Then read `SETUP-WITH-CLAUDE.md`, `CLAUDE.md` and
-> `README.md` and walk me through the rest one step at a time. Before each
-> step tell me what it does and what I must do myself; after each step
-> verify it worked before moving on. Do not skip ahead. Never ask me for my
-> HYROS API key or my password — they only go into the app's own setup
-> screen.
+> I want my own copy of https://github.com/Hyros-AI/hyros-ai in my GitHub
+> repo https://github.com/________/________ . Copy it there with git
+> (keep the history), then follow `SETUP-WITH-CLAUDE.md` to set it up
+> with me.
 
 Fill in your repo URL. If you already did some steps, add "I am at step N".
+
+## Instructions for Claude (read before doing anything else)
+
+- Copy the template into the user's repo exactly as step 1 describes
+  (`git fetch` + push; never a zip, never `git init` + copy) — the shared
+  history is what makes updates work later.
+- Then read `CLAUDE.md` and `README.md` before continuing.
+- Walk the user through the steps below **one at a time, in order**.
+  Before each step say what it does and what the user must do themselves;
+  after each step verify the "Done when" before moving on. Do not skip
+  ahead, even if the user seems technical.
+- **Never ask for the HYROS API key or the password**, and never accept
+  them in chat — they go into the app's own setup screen only (step 5).
+- Ask for URLs (repo, app) as you need them and verify with
+  `https://<app url>/api/setup`.
 
 ---
 
