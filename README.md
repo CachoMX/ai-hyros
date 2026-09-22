@@ -27,12 +27,11 @@ are listed in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Before you start
 
-- **A HYROS account with MCP access.** MCP access is enabled per account by
-  HYROS support — it is not self-serve and there is nothing to switch on in
-  the HYROS app. Ask support to enable it before you deploy; a key from an
-  account without it is rejected at setup with a hint to that effect.
-- **Your HYROS API key** (HYROS → Settings → API). The dashboard uses it
-  server-side only. (The HYROS MCP docs describe an OAuth sign-in for
+- **A HYROS account.** Your API key (HYROS → Settings → API) is pasted
+  into the app's connect screen once it is deployed; the dashboard uses it
+  server-side only. (Should HYROS ever report that MCP access is not
+  enabled for the account, support switches it on — nothing to change in
+  the app.) (The HYROS MCP docs describe an OAuth sign-in for
   chat clients and say no API key is involved; this dashboard is a server,
   not a chat client, and sends the REST API key as an `API-Key` header —
   see `FINDINGS.md` §9 for the status of that path.)

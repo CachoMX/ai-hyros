@@ -29,7 +29,9 @@ Fill in your repo URL. If you already did some steps, add "I am at step N".
   after each step verify the "Done when" before moving on. Do not skip
   ahead, even if the user seems technical.
 - **Never ask for the HYROS API key or the password**, and never accept
-  them in chat — they go into the app's own setup screen only (step 5).
+  them in chat — they go into the app's own setup screen only (step 4).
+  Do not stop to ask whether the user "has" the key; it is only needed
+  once the app is live.
 - Ask for URLs (repo, app) as you need them and verify with
   `https://<app url>/api/setup`.
 
@@ -115,26 +117,14 @@ Claude confirms the previous step's "done when" before continuing.
   Then run `npm run check` (Node 20+, nothing to install) and report "all
   checks pass". Do not squash, re-init or copy
   files by hand — the shared history is what makes `git merge upstream/master`
-  work in step 7.
+  work in step 6.
 - **Done when**: on GitHub the user's repo shows `api/`, `public/`,
   `vercel.json` and `package.json` at the top level (not inside a
   subfolder), and `npm run check` passes. *Local only, optional*:
   `node scripts/devserver.mjs` → `http://127.0.0.1:4321`, password `dev`,
   look at the Demo account.
 
-### Step 2 — Get the HYROS API key
-- **Goal**: you hold the key the app will use.
-- **You do**: in HYROS go to **Settings → API** and copy your API key.
-  Keep it somewhere safe; you will paste it into the app in step 5. Do not
-  paste it into this chat.
-- **Claude does**: explains what the key unlocks (read access to reports,
-  leads, sales, calls). If the HYROS MCP connector is attached to Claude,
-  it can confirm the account email and ad-account count as a sanity check
-  (`hyros_get_user_info`) — optional, the dashboard does not need it.
-- **Done when**: you have the key. Agency? Note whether you will tick
-  "agency key" in step 5 — it pulls in every client account you can access.
-
-### Step 3 — Deploy to Vercel
+### Step 2 — Deploy to Vercel
 - **Goal**: the app is live at a `*.vercel.app` URL.
 - **You do**: vercel.com → **Add New → Project** → **Import** the GitHub
   repo from step 1 (connect your GitHub account to Vercel if asked).
@@ -145,9 +135,9 @@ Claude confirms the previous step's "done when" before continuing.
 - **Claude does**: reads `https://<url>/api/setup` and expects
   `"state":"needs_storage"` — the store is added next.
 - **Done when**: the URL loads and shows the Demo dashboard under a
-  "Storage needs to be set up" card. That is correct; go to step 4.
+  "Storage needs to be set up" card. That is correct; go to step 3.
 
-### Step 4 — Set up storage (Upstash for Redis)
+### Step 3 — Set up storage (Upstash for Redis)
 - **Goal**: the app has a database for snapshots, keys and the password.
 - **You do**: Vercel → the project → **Storage** tab → **Create Database**
   → **Upstash for Redis** (Marketplace, free plan) → Continue → connect
@@ -164,20 +154,22 @@ Claude confirms the previous step's "done when" before continuing.
 - **Done when**: the app opens on "Connect your HYROS account" (or you
   click **Check again** on the storage screen and it advances).
 
-### Step 5 — Enter the API key and choose the password
+### Step 4 — Connect your HYROS account
 - **Goal**: the dashboard is yours.
-- **You do**: open your app URL **now** (the connect screen is
-  first-come). Paste the HYROS API key, tick "agency key" if it is one,
-  type a password twice, click **Connect & build my dashboard**. The key
-  is checked with HYROS first (a bad key changes nothing), then everything
-  is stored and the first snapshot builds — usually a minute or two, up to
-  5 minutes on a large account.
+- **You do**: in HYROS go to **Settings → API** and copy your API key.
+  Open your app URL **now** (the connect screen is first-come), paste the
+  key there, tick "agency key" if it is one (it adds every client account
+  you can access), type a password twice, click **Connect & build my
+  dashboard**. The key is checked with HYROS first (a bad key changes
+  nothing), then everything is stored and the first snapshot builds —
+  usually a minute or two, up to 5 minutes on a large account. The key and
+  the password go into that screen only, never into this chat.
 - **Claude does**: reads `/api/setup` and expects `"state":"ready"`. Asks
   you whether the report shows your ad accounts and the badge reads
   **Live**.
 - **Done when**: you see your own numbers.
 
-### Step 6 — Optional: lock it down, add accounts
+### Step 5 — Optional: lock it down, add accounts
 - **Hardening** (optional): the last setup screen shows two generated
   secrets with copy buttons. Vercel → Settings → Environment Variables →
   add `ACCOUNT_KEY_SECRET` and `CRON_SECRET` with those values → Redeploy
@@ -188,7 +180,7 @@ Claude confirms the previous step's "done when" before continuing.
   limited to once per hour; with it, signed.
 - **Start over**: account menu → Setup & security → type `RESET`.
 
-### Step 7 — Later: updates and new features
+### Step 6 — Later: updates and new features
 - **Updates**: the template moves on; your repo keeps the `upstream`
   remote from step 1, so bringing in a new version is one prompt to
   Claude — *"Pull the latest AI HYROS template from upstream, resolve any
