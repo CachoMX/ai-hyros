@@ -1,0 +1,14 @@
+/* Tracking Health — feature-scoped styles */
+.health-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.health-row:last-child { border-bottom: 0; }
+.health-row code { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.health-row { min-width: 0; flex-wrap: wrap; }
+/* A check's message at reading size (never the grey footnote): "Check failed: …", "Skipped this refresh …". */
+.health-msg { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.health-row .pill + code, .health-row .pill + .health-msg { margin-left: 2px; }
+.health-status { display: flex; align-items: center; gap: 10px; padding: 8px 0 10px; font-size: 13px; }
+.health-errors .health-msg { color: var(--ink); }
+
+.health-variants { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 0 8px 12px; border-bottom: 1px solid var(--rule); }
+.health-variants .sub { font-family: var(--mono); font-size: 11px; }
+.health-site { border-bottom: 0; }

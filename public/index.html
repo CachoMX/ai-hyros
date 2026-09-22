@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>AI HYROS — Performance &amp; CRM</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="/assets/brand/hyros-mark-blue.svg" type="image/svg+xml">
+</head>
+<body>
+
+<!-- Password gate -->
+<div class="gate" id="gate">
+  <form class="gate-card win" id="gateForm">
+    <div class="winbar"><i></i><i></i><i></i><span>app.hyros.com &middot; sign in</span></div>
+    <div class="gate-body">
+      <img class="gate-sven" src="/assets/brand/sven-lavender.svg" alt="">
+      <div class="gate-kick">AI Hyros</div>
+      <h1>Your ad data. <b>Live.</b></h1>
+      <p>Performance report &amp; CRM, served from the HYROS MCP.</p>
+      <input type="password" id="gateKey" placeholder="Dashboard password" autocomplete="current-password">
+      <button class="primary" type="submit" style="width:100%">Open dashboard</button>
+      <div class="gate-err" id="gateErr" hidden></div>
+      <button type="button" class="linkish" id="gateDemo">Just show me the demo</button>
+    </div>
+  </form>
+</div>
+
+<!-- First-run setup: storage gate -> password -> HYROS key -> hardening. Also the Setup & security panel. -->
+<div class="setup" id="setup" hidden>
+  <div class="setup-card win">
+    <div class="winbar"><i></i><i></i><i></i><span>app.hyros.com &middot; setup</span></div>
+    <div class="setup-body">
+      <ol class="setup-steps" id="setupSteps">
+        <li data-step="storage">Storage</li>
+        <li data-step="connect">Connect</li>
+        <li data-step="harden">Secure</li>
+      </ol>
+
+      <section id="setupStorage" hidden>
+        <div class="gate-kick">Step 1 of 3</div>
+        <h1>Storage needs to be <b>set up.</b></h1>
+        <p>This dashboard keeps your snapshots, settings and encrypted API keys in a free Upstash Redis database attached to the Vercel project. Nothing else is required.</p>
+        <ol class="setup-guide">
+          <li>Open the project in <b>Vercel</b> → <b>Storage</b> tab → <b>Create Database</b>.</li>
+          <li>Pick <b>Upstash</b> → <b>Redis</b> (the free plan is plenty) → <b>Continue</b>.</li>
+          <li>Connect it to this project for <b>all environments</b>. Vercel adds the <code>KV_REST_API_URL</code> / <code>KV_REST_API_TOKEN</code> variables itself.</li>
+          <li><b>Redeploy</b> (Deployments → ⋯ → Redeploy) so the functions pick the variables up, then come back here.</li>
+        </ol>
+        <div class="setup-actions">
+          <button class="primary" type="button" id="setupCheck">Check again</button>
+          <button type="button" id="setupDemo">Explore the demo meanwhile</button>
+        </div>
+        <div class="gate-err" id="setupStorageErr" hidden></div>
+      </section>
+
+      <section id="setupConnect" hidden>
+        <form id="setupConnectForm" autocomplete="off">
+          <div class="gate-kick">Step 2 of 3</div>
+          <h1>Connect your <b>HYROS account.</b></h1>
+          <p>Paste the API key from HYROS (<b>Settings → API</b>) and choose the password this dashboard will ask for from now on. The key is checked with HYROS, encrypted, and never shown again; the first snapshot builds right away.</p>
+          <label class="setup-label" for="setupKey">HYROS API key</label>
+          <input type="password" id="setupKey" placeholder="HYROS API key" autocomplete="off" spellcheck="false">
+          <p class="setup-hint">MCP access is enabled per account by HYROS support. If the key is rejected with a permission error, ask support to enable it.</p>
+          <label class="acct-check"><input type="checkbox" id="setupAgency"> This is an agency key — add all my client accounts</label>
+          <label class="setup-label" for="setupPw1">Dashboard password</label>
+          <input type="password" id="setupPw1" placeholder="Password (8+ characters)" autocomplete="new-password" required>
+          <input type="password" id="setupPw2" placeholder="Repeat password" autocomplete="new-password" required>
+          <button class="primary" type="submit" style="width:100%" id="setupConnectBtn">Connect &amp; build my dashboard</button>
+          <div class="gate-err" id="setupConnectErr" hidden></div>
+          <button type="button" class="linkish" id="setupSkipKey">No key yet — just set the password and explore the demo</button>
+        </form>
+      </section>
+
+      <section id="setupAccount" hidden>
+        <form id="setupKeyForm" autocomplete="off">
+          <div class="gate-kick">Connect HYROS</div>
+          <h1>Connect your <b>HYROS account.</b></h1>
+          <p>Paste the API key from HYROS (<b>Settings → API</b>). It is checked against HYROS, encrypted, and never shown again. The first snapshot builds right away — usually under a minute.</p>
+          <input type="password" id="setupKey2" placeholder="HYROS API key" autocomplete="off" spellcheck="false" required>
+          <p class="setup-hint">MCP access is enabled per account by HYROS support. If the key is rejected with a permission error, ask support to enable it.</p>
+          <label class="acct-check"><input type="checkbox" id="setupAgency2"> This is an agency key — add all my client accounts</label>
+          <button class="primary" type="submit" style="width:100%" id="setupConnect2">Connect &amp; build my dashboard</button>
+          <div class="gate-err" id="setupKeyErr" hidden></div>
+          <button type="button" class="linkish" id="setupSkipKey2">Not now — back to the demo</button>
+        </form>
+      </section>
+
+      <section id="setupHarden" hidden>
+        <div class="gate-kick">Step 3 of 3 · optional</div>
+        <h1>Lock it <b>down.</b></h1>
+        <p>Two secrets were generated for you and are stored in your database. Moving them into Vercel as environment variables keeps the encryption secret out of the same store as the encrypted keys and signs the daily refresh. Optional — everything works either way.</p>
+        <div class="secret-row"><b>ACCOUNT_KEY_SECRET</b><code id="secretKey">—</code><button type="button" data-copy="secretKey">Copy</button></div>
+        <div class="secret-row"><b>CRON_SECRET</b><code id="secretCron">—</code><button type="button" data-copy="secretCron">Copy</button></div>
+        <ol class="setup-guide">
+          <li>Vercel → project → <b>Settings → Environment Variables</b> → add both, all environments.</li>
+          <li><b>Redeploy</b>, then click the button below — the copies in the database are removed once they match.</li>
+        </ol>
+        <div class="setup-actions">
+          <button class="primary" type="button" id="setupHardenBtn">I added them to Vercel</button>
+          <button type="button" id="setupHardenLater">Later — open the dashboard</button>
+        </div>
+        <div class="sub" id="setupHardenStatus"></div>
+      </section>
+
+      <section id="setupSecurity" hidden>
+        <div class="gate-kick">Setup &amp; security</div>
+        <h1>This <b>dashboard.</b></h1>
+        <div class="setup-facts" id="setupFacts"></div>
+        <form id="setupChangePw" class="setup-block" autocomplete="off">
+          <h3>Change password</h3>
+          <input type="password" id="changePw1" placeholder="New password (8+ characters)" autocomplete="new-password" required>
+          <input type="password" id="changePw2" placeholder="Repeat new password" autocomplete="new-password" required>
+          <button type="submit">Change password</button>
+          <div class="sub" id="changePwStatus"></div>
+        </form>
+        <div class="setup-block" id="secHardenBlock">
+          <h3>Pending secrets</h3>
+          <p class="sub">Generated on first load and still stored in the database. Paste them into Vercel to harden.</p>
+          <button type="button" id="secHardenOpen">Show the secrets</button>
+        </div>
+        <div class="setup-block">
+          <h3>Diagnostics</h3>
+          <p class="sub">Copies a small JSON — template version, setup state, storage, account count, the last refresh's steps and warnings, missing MCP tools. Never keys, passwords or emails. Paste it into a problem report.</p>
+          <div class="setup-actions">
+            <button type="button" id="copyDiag">Copy diagnostics</button>
+            <a id="reportProblem" class="setup-link" href="#" target="_blank" rel="noopener">Report a problem</a>
+          </div>
+          <div class="sub" id="diagStatus"></div>
+        </div>
+        <div class="setup-block danger">
+          <h3>Factory reset</h3>
+          <p class="sub">Deletes every account, snapshot, setting and the password from the database. The Vercel project and your HYROS accounts are untouched; the dashboard returns to first-load setup.</p>
+          <input type="text" id="resetConfirm" placeholder="Type RESET to confirm" autocomplete="off">
+          <button type="button" class="danger" id="resetBtn" disabled>Reset this dashboard</button>
+          <div class="sub" id="resetStatus"></div>
+        </div>
+        <div class="setup-actions"><button type="button" id="setupClose">Close</button></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand"><img class="brand-mark" src="/assets/brand/hyros-mark-blue.svg" alt="Hyros"></div>
+    <div class="col-wrap acct-wrap">
+      <button id="acctBtn" class="acct-btn" title="Switch account">
+        <span id="acctLabel">—</span><span class="acct-caret">▾</span>
+      </button>
+      <div id="acctPanel" class="col-panel acct-panel" hidden>
+        <div class="acct-head" id="acctHead"></div>
+        <div id="acctList" class="acct-list"></div>
+        <div class="acct-add">
+          <button type="button" id="acctAddBtn" class="acct-add-btn">＋ Add account</button>
+          <form id="acctForm" hidden autocomplete="off">
+            <label for="acctKey" class="sub" id="acctFormTitle">HYROS API key for the account to add</label>
+            <input type="password" id="acctKey" placeholder="Paste the API key…" autocomplete="off" spellcheck="false">
+            <label class="acct-check" id="acctAgencyRow">
+              <input type="checkbox" id="acctAgency"> Agency account — add all my client accounts
+            </label>
+            <div class="acct-form-row">
+              <button type="submit" class="primary" id="acctConnect">Connect</button>
+              <button type="button" id="acctCancel">Cancel</button>
+            </div>
+            <div class="sub" id="acctStatus">The key is verified against HYROS, encrypted, and never shown again.</div>
+          </form>
+          <button type="button" class="linkish acct-setup" id="acctSetupBtn">Setup &amp; security</button>
+        </div>
+      </div>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div class="spacer"></div>
+    <span class="updated" id="updated"></span>
+    <span class="badge" id="originBadge">—</span>
+    <button id="refreshBtn" class="primary">Refresh</button>
+  </header>
+
+  <div class="setup-banner" id="setupBanner" hidden></div>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="report">Performance Report</button>
+    <button class="tab" data-view="crm">CRM / Leads</button>
+    <!-- Feature tabs (public/features/<id>/) are mounted here by app.js — see FEATURES.md -->
+  </nav>
+
+  <!-- Performance report -->
+  <section class="panel" id="view-report">
+    <div id="reportNote"></div>
+    <div class="crumbs" id="crumbs" hidden></div>
+
+    <div class="controls">
+      <div class="chipset" id="rangeChips"></div>
+      <div class="chipset" id="levelChips"></div>
+      <input type="search" id="reportSearch" placeholder="Filter by name…">
+      <label style="display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:13px">
+        <input type="checkbox" id="hideZero"> Hide zero-spend
+      </label>
+      <div class="spacer"></div>
+      <span class="rowcount" id="reportCount"></span>
+      <div class="col-wrap" id="attrWrap" hidden>
+        <button id="attrBtn">⚖ Attribution: Last Click</button>
+        <div id="attrPanel" class="col-panel attr-panel" hidden>
+          <button class="attr-opt active" data-model="last">
+            <b>Last Click</b>
+            <span>All credit goes to the final tracked click before the sale.</span>
+          </button>
+          <button class="attr-opt" data-model="custom">
+            <b>Custom HYROS</b>
+            <span>AI-weighted multi-touch — credit follows the clicks that actually created the customer, not just the last one.</span>
+          </button>
+        </div>
+      </div>
+      <div class="col-wrap" id="setWrap">
+        <button id="setBtn">⚙ Report settings</button>
+        <div id="setPanel" class="col-panel set-panel" hidden>
+          <div class="set-row">
+            <label for="setModel">Attribution model</label>
+            <select id="setModel">
+              <option value="LAST_CLICK">Last click</option>
+              <option value="FIRST_CLICK">First click</option>
+              <option value="SCIENTIFIC">Scientific</option>
+            </select>
+          </div>
+          <div class="set-row">
+            <label for="setWindow">Attribution window (days)</label>
+            <input type="number" id="setWindow" min="0" max="365" step="1" value="0">
+            <span class="sub">0 = account default · last click only</span>
+          </div>
+          <div class="set-row">
+            <label>Rank by funnel stage</label>
+            <div id="setStages" class="set-stages"></div>
+            <span class="sub">Only leads/sales in these stages count; spend stays. Pick none for the standard report.</span>
+          </div>
+          <div class="col-foot">
+            <span class="sub" id="setStatus">Applies on the next Refresh.</span>
+            <button id="setSaveBtn" class="primary">Save &amp; refresh</button>
+          </div>
+        </div>
+      </div>
+      <div class="col-wrap">
+        <button id="colBtn">⊞ Columns</button>
+        <div id="colPanel" class="col-panel" hidden>
+          <div class="col-head">
+            <input type="search" id="colSearch" placeholder="Search 103 metrics…">
+            <span class="rowcount" id="colCount"></span>
+            <button id="colReset" class="chip">Reset</button>
+          </div>
+          <div id="colGroups" class="col-groups"></div>
+          <div class="col-foot">
+            <span class="sub">Drag table headers to reorder columns.</span>
+            <button id="saveViewBtn" class="primary">Save as my default view</button>
+          </div>
+        </div>
+      </div>
+      <button id="exportReport">Export CSV</button>
+    </div>
+
+    <div class="kpis" id="reportKpis"></div>
+    <div class="win"><div class="winbar"><i></i><i></i><i></i><span>app.hyros.com &middot; performance report</span></div><div class="table-wrap"><table id="reportTable"></table></div></div>
+  </section>
+
+  <!-- CRM -->
+  <section class="panel" id="view-crm" hidden>
+    <div id="crmNote"></div>
+    <div class="controls">
+      <div class="chipset" id="crmTabs"></div>
+      <select id="stageFilter"><option value="">All stages</option></select>
+      <select id="attrFilter">
+        <option value="">All leads</option>
+        <option value="yes">Attributed only</option>
+        <option value="no">Unattributed only</option>
+      </select>
+      <input type="search" id="crmSearch" placeholder="Search email, name, source, tag…">
+      <div class="spacer"></div>
+      <span class="rowcount" id="crmCount"></span>
+      <button id="exportCrm">Export CSV</button>
+    </div>
+
+    <div class="kpis" id="crmKpis"></div>
+    <div class="win"><div class="winbar"><i></i><i></i><i></i><span>app.hyros.com &middot; crm</span></div><div class="table-wrap"><table id="crmTable"></table></div></div>
+
+    <div class="note" style="margin-top:16px">
+      <b>Attribution note.</b> <code>firstSource</code> / <code>lastSource</code> are populated
+      by the MCP only for leads that arrived via a tracked click. Leads created by the
+      Stripe and HubSpot integrations have no click history, so their source is genuinely
+      empty — not a reporting bug. <b>Income</b> is joined from <code>hyros_get_sales</code>
+      by email, because the lead object carries no revenue field.
+    </div>
+  </section>
+
+  <!-- Feature sections are inserted after #view-crm by app.js (one <section class="panel feature" id="view-<id>"> each) -->
+</div>
+
+<!-- Drill drawer: number -> lead cohort -> journey (HYROS deep mode) -->
+<div id="drawerScrim" class="drawer-scrim" hidden></div>
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-head">
+    <button id="drawerBack" title="Back to cohort" hidden>←</button>
+    <div class="drawer-titles">
+      <div id="drawerTitle" class="drawer-title"></div>
+      <div id="drawerSub" class="drawer-subtitle"></div>
+    </div>
+    <button id="drawerClose" title="Close">✕</button>
+  </div>
+  <div id="drawerBody" class="drawer-body"></div>
+</div>
+
+<!-- Sticky horizontal scrollbar, synced with the visible table -->
+<div id="hproxy" class="hproxy" hidden><div id="hproxyInner"></div></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

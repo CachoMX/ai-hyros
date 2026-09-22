@@ -1,0 +1,10 @@
+node_modules/
+.vercel/
+.env
+.env.local
+*.log
+.DS_Store
+shots/
+dist/
+.env*.local
+.claude/worktrees/

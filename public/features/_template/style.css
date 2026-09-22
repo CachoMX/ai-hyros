@@ -1,0 +1,5 @@
+/* Feature-scoped styles only. Prefix every class with the feature id to
+   avoid collisions; the shared kit (.fpanel .fcols .fhint .fshare .kpis
+   .note .pill) is already available. Use the tokens in styles.css :root —
+   never hard-coded colors. */
+.my-feature-row { display: flex; gap: 10px; }

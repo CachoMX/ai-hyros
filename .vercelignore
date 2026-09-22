@@ -1,0 +1,22 @@
+# Nothing here is needed at runtime — keep the deployment bundle to the app.
+# data/seed.json is read only by scripts/ (the dev server, the self-test and
+# make-seed); api/ reads the Upstash store alone and the Demo account is
+# generated in the browser from public/demo.js.
+data/
+scripts/
+.github/
+.claude/
+dist/
+shots/
+scratchpad/
+*.zip
+*.log
+README.md
+FINDINGS.md
+FEATURES.md
+UI-STYLE-GUIDE.md
+CLAUDE.md
+CHANGELOG.md
+.env.example
+.gitignore
+.vercelignore
