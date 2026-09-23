@@ -9,7 +9,7 @@
     }
   ],
   "functions": {
-    "api/refresh.js": { "maxDuration": 300, "includeFiles": "public/features/**" }
+    "api/refresh.js": { "maxDuration": 300, "includeFiles": "public/**" }
   },
   "headers": [
     {

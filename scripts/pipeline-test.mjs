@@ -29,7 +29,9 @@ try {
   const vercelJson = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   check('REFRESH_MAX_S is 300 (Vercel Fluid compute) and the build budget keeps 10 s of headroom', budget.REFRESH_MAX_S === 300 && budget.REFRESH_BUDGET_MS === 290000, JSON.stringify([budget.REFRESH_MAX_S, budget.REFRESH_BUDGET_MS]));
   check('api/refresh.js exports maxDuration = REFRESH_MAX_S', (await import('../api/refresh.js')).maxDuration === budget.REFRESH_MAX_S);
-  check('vercel.json declares maxDuration 300 + includeFiles for api/refresh.js', vercelJson.functions?.['api/refresh.js']?.maxDuration === budget.REFRESH_MAX_S && vercelJson.functions['api/refresh.js'].includeFiles === 'public/features/**', JSON.stringify(vercelJson.functions));
+  // Feature server.js modules are loaded with a dynamic import(), so Vercel cannot trace
+  // them or their public/shared/*.js imports: includeFiles must cover all of public/.
+  check('vercel.json declares maxDuration 300 + includeFiles public/** for api/refresh.js (feature servers import public/shared)', vercelJson.functions?.['api/refresh.js']?.maxDuration === budget.REFRESH_MAX_S && vercelJson.functions['api/refresh.js'].includeFiles === 'public/**', JSON.stringify(vercelJson.functions));
   check('cron: per-account share is min(remaining, 120 s); the whole run has the build budget, 20 s minimum per account', budget.cronAccountBudgetMs(290000) === 120000 && budget.cronAccountBudgetMs(45000) === 45000 && budget.CRON_MIN_ACCOUNT_MS === 20000 && budget.CRON_BUDGET_MS === budget.REFRESH_BUDGET_MS, JSON.stringify([budget.cronAccountBudgetMs(290000), budget.cronAccountBudgetMs(45000)]));
   check('buildSnapshot defaults to the full build budget', (await import('../api/_snapshot.js')).DEFAULT_BUDGET_MS === budget.REFRESH_BUDGET_MS);
 
