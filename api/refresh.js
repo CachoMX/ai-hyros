@@ -14,6 +14,7 @@ import { writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw } from '
 import { McpNotConfigured } from './_mcp.js';
 import { accountFromReq, asAccount, listAccounts, markKeyStatus, noteRefresh, syncClients } from './_accounts.js';
 import { logEvent } from './_log.js';
+import { readWebhookConfig, readWebhookDirty, clearWebhookDirty } from './_webhook.js';
 import { REFRESH_MAX_S, REFRESH_BUDGET_MS, CRON_BUDGET_MS, CRON_MIN_ACCOUNT_MS, cronAccountBudgetMs } from './_budget.js';
 
 /**
@@ -23,18 +24,81 @@ import { REFRESH_MAX_S, REFRESH_BUDGET_MS, CRON_BUDGET_MS, CRON_MIN_ACCOUNT_MS, 
  */
 export const maxDuration = REFRESH_MAX_S;
 
+const dependencies = {
+  buildSnapshot, writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw,
+  checkAccess, isCron, deny, accountFromReq, asAccount, listAccounts, markKeyStatus,
+  noteRefresh, syncClients, logEvent, readWebhookDirty, clearWebhookDirty,
+  now: Date.now,
+  webhookConfiguration: () => process.env.HYROS_WEBHOOK_ACCOUNTS,
+  cronSecret: () => process.env.CRON_SECRET,
+};
+
+function webhookWarning(deps, operation, accountId, code = 'storage_unavailable') {
+  // Storage exceptions can contain response bodies or credentials. Log fixed codes only.
+  deps.logEvent('refresh.webhook_warning', { level: 'warning', operation, accountId, code });
+}
+
+function configuredWebhookAccounts(deps) {
+  const raw = deps.webhookConfiguration();
+  if (!raw) return new Set();
+  try { return new Set([...readWebhookConfig(raw).values()].map((entry) => entry.accountId)); }
+  catch { webhookWarning(deps, 'configuration', undefined, 'invalid_configuration'); return new Set(); }
+}
+
+async function captureWebhookMarker(accountId, deps) {
+  try { return await deps.readWebhookDirty(accountId); }
+  catch { webhookWarning(deps, 'read', accountId); return undefined; }
+}
+
+/** A saved partial snapshot must not acknowledge an event whose data was never fetched. */
+export function snapshotFreshForWebhook(snapshot, startedAt, completedAt = Date.now()) {
+  const clean = (block) => block && typeof block === 'object' && !Array.isArray(block)
+    && !block.stale && !block.skipped && !block.error && !block.partial
+    && ['warnings', 'errors'].every((field) => block[field] === undefined
+      || (Array.isArray(block[field]) && block[field].length === 0));
+  const current = (value) => typeof value === 'string' && Number.isFinite(Date.parse(value))
+    && Date.parse(value) >= startedAt && Date.parse(value) <= completedAt;
+  if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || !clean(snapshot)
+    || snapshot.origin !== 'mcp' || !current(snapshot.generatedAt)
+    || !Array.isArray(snapshot.warnings) || snapshot.warnings.length
+    || snapshot.sourcesTruncated !== false || snapshot.truncated) return false;
+  const crm = snapshot.crm;
+  const sync = crm?.sync;
+  const lists = ['leads', 'sales', 'calls', 'subscriptions'];
+  if (!clean(crm) || !clean(sync) || crm.truncated || !current(sync.syncedAt)
+    || !lists.every((name) => Array.isArray(crm[name]) && sync.truncated?.[name] === false)) return false;
+  if (!['today', 'yesterday', '7d', '30d'].every((name) => {
+    const range = snapshot.ranges?.[name];
+    return clean(range) && !range.truncated
+      && ['account', 'adset', 'ad'].every((level) => Array.isArray(range.levels?.[level]));
+  })) return false;
+  const attribution = snapshot.attribution;
+  return Boolean(clean(attribution) && current(attribution.checkedAt)
+    && Array.isArray(attribution.conversions) && Array.isArray(attribution.errors)
+    && attribution.coverage?.complete === true && attribution.coverage?.truncated === false);
+}
+
 /** Build + persist one account's snapshot under its own key. */
-async function refreshAccount(accountId, steps, budgetMs) {
-  const started = Date.now();
+export async function refreshAccount(accountId, steps, budgetMs, overrides = {}) {
+  const deps = { ...dependencies, ...overrides };
+  const { buildSnapshot, writeSnapshot, readSnapshot, readPrefs, storeConfigured,
+    asAccount, markKeyStatus, noteRefresh, logEvent, now } = deps;
+  const webhookAccounts = deps.webhookAccounts ?? configuredWebhookAccounts(deps);
+  const started = now();
+  const marker = webhookAccounts.has(accountId) ? await captureWebhookMarker(accountId, deps) : null;
+  if (deps.dirtyOnly && !marker) {
+    return { skipped: marker === undefined ? 'webhook marker unavailable' : 'webhook already consumed' };
+  }
   const [prefs, previous] = storeConfigured()
     ? await Promise.all([readPrefs(accountId), readSnapshot(accountId)])
     : [null, null];
   let snapshot;
+  const buildStarted = now();
   try {
     snapshot = await asAccount(accountId, () =>
       buildSnapshot({ onProgress: (s) => steps.push(`${accountId}: ${s}`), prefs, previous, budgetMs }));
   } catch (err) {
-    logEvent('refresh.failed', { accountId, code: err.code || err.name || 'error', message: err.message, ms: Date.now() - started });
+    logEvent('refresh.failed', { accountId, code: err.code || err.name || 'error', message: err.message, ms: now() - started });
     // Only a rejected key (401) marks the account (or its agency) invalid so
     // the selector can say so instead of 40 clients failing one by one. A
     // 403 (missing role, client not authorized) is recorded as the last
@@ -46,33 +110,76 @@ async function refreshAccount(accountId, steps, budgetMs) {
     throw err;
   }
   const persisted = storeConfigured() ? await writeSnapshot(snapshot, accountId) : false;
+  if (marker && persisted === true && snapshotFreshForWebhook(snapshot, buildStarted, now())) {
+    try { await deps.clearWebhookDirty(accountId, marker); }
+    catch { webhookWarning(deps, 'clear', accountId); }
+  } else if (marker) {
+    logEvent('refresh.webhook_retained', { accountId, reason: persisted === true ? 'incomplete_snapshot' : 'snapshot_not_persisted' });
+  }
   if (storeConfigured()) { await markKeyStatus(accountId, 'ok'); await noteRefresh(accountId, true); }
-  logEvent('refresh.ok', { accountId, ms: Date.now() - started, warnings: snapshot.warnings?.length || 0, persisted });
+  logEvent('refresh.ok', { accountId, ms: now() - started, warnings: snapshot.warnings?.length || 0, persisted });
   return { snapshot, persisted };
 }
 
 /**
- * Cron with no ?account=: which accounts to refresh, stalest first. Clients
+ * Cron with no ?account=: dirty accounts first, then stalest first. Clients
  * of an agency whose accessible_account_id mode is unsupported cannot be
  * read at all, so they are listed as skipped instead of failing daily.
  */
-function cronTargets(listed) {
+export function cronTargets(listed, { dirtyAccounts = new Set(), dirtyOnly = false } = {}) {
   const byId = new Map(listed.map((a) => [a.id, a]));
   const unsupported = (a) => a.parentId && byId.get(a.parentId)?.clientModeStatus === 'unsupported';
-  const candidates = listed.filter((a) => a.keyStatus !== 'invalid' && a.status === 'APPROVED');
+  const candidates = listed.filter((a) => a.keyStatus !== 'invalid' && a.status === 'APPROVED'
+    && (!dirtyOnly || dirtyAccounts.has(a.id)));
   return {
     skipped: candidates.filter(unsupported).map((a) => ({ id: a.id, skipped: 'unsupported' })),
     accounts: candidates.filter((a) => !unsupported(a))
-      .sort((a, b) => String(a.lastRefresh || '').localeCompare(String(b.lastRefresh || ''))),
+      .sort((a, b) => Number(dirtyAccounts.has(b.id)) - Number(dirtyAccounts.has(a.id))
+        || String(a.lastRefresh || '').localeCompare(String(b.lastRefresh || ''))),
   };
 }
 
-export default async function handler(req, res) {
+export async function webhookCronTargets(listed, overrides = {}) {
+  const deps = { ...dependencies, ...overrides };
+  const webhookAccounts = deps.webhookAccounts ?? configuredWebhookAccounts(deps);
+  const dirtyAccounts = new Set();
+  const unreadable = [];
+  const candidates = cronTargets(listed).accounts.filter((account) => webhookAccounts.has(account.id));
+  // Small batches keep marker reads bounded by the configured account limit.
+  for (let offset = 0; offset < candidates.length; offset += 5) {
+    await Promise.all(candidates.slice(offset, offset + 5).map(async (account) => {
+      const marker = await captureWebhookMarker(account.id, deps);
+      if (marker) dirtyAccounts.add(account.id);
+      else if (marker === undefined) unreadable.push({ id: account.id, skipped: 'webhook marker unavailable' });
+    }));
+  }
+  const targets = cronTargets(listed, { dirtyAccounts, dirtyOnly: deps.dirtyOnly });
+  if (deps.dirtyOnly) targets.skipped.push(...unreadable);
+  return targets;
+}
+
+export function createRefreshHandler(overrides = {}) {
+  const deps = { ...dependencies, ...overrides };
+  return (req, res) => handleRefresh(req, res, deps);
+}
+
+async function handleRefresh(req, res, deps) {
+  const { checkAccess, isCron, deny, storeConfigured, kvRaw, listAccounts,
+    syncClients, accountFromReq, now, cronSecret } = deps;
   const cron = isCron(req);
+  const url = new URL(req.url, `http://${req.headers.host || 'local'}`);
+  const dirtyOnly = url.searchParams.get('dirty') === '1';
   if (!cron) {
     const access = await checkAccess(req);
     if (!access.ok) return deny(res, access);
-  } else if (!process.env.CRON_SECRET) {
+  }
+  if (dirtyOnly && (!cron || !cronSecret())) {
+    return res.status(403).json({ ok: false, error: 'cron_only', message: 'Dirty-only refresh requires CRON_SECRET authentication.' });
+  }
+  if (dirtyOnly && url.searchParams.has('account')) {
+    return res.status(400).json({ ok: false, error: 'invalid_target', message: 'Dirty-only refresh selects eligible accounts automatically; omit account.' });
+  }
+  if (cron && !cronSecret()) {
     // Unsigned cron (CRON_SECRET not pasted into Vercel yet): at most one run per hour.
     if (!storeConfigured()) return res.status(503).json({ ok: false, error: 'needs_storage' });
     const lock = await kvRaw(['SET', 'aihyros:cron:lock', new Date().toISOString(), 'NX', 'EX', '3000']);
@@ -80,31 +187,36 @@ export default async function handler(req, res) {
   }
 
   const steps = [];
-  const started = Date.now();
-  const url = new URL(req.url, `http://${req.headers.host || 'local'}`);
+  const started = now();
+  const webhookAccounts = configuredWebhookAccounts(deps);
+  const refreshDeps = { ...deps, webhookAccounts, dirtyOnly };
+  if (dirtyOnly && !webhookAccounts.size) {
+    return res.status(503).json({ ok: false, error: 'webhook_not_configured', message: 'Configure HYROS_WEBHOOK_ACCOUNTS before running the dirty-only worker.' });
+  }
 
-  // Cron with no ?account=: refresh the stalest accounts, one after another,
+  // Cron with no ?account=: refresh dirty accounts, then the stalest fallback,
   // until the function's time budget is spent; the rest wait for the next run.
   if (cron && !url.searchParams.get('account')) {
     const listed = await listAccounts({ withStatus: true });
     // Agencies: pick up new / revoked clients (one cheap call each).
     const synced = [];
-    for (const a of listed.filter((x) => x.agency && x.keyStatus !== 'invalid')) {
+    for (const a of listed.filter((x) => !dirtyOnly && x.agency && x.keyStatus !== 'invalid')) {
       try { synced.push({ id: a.id, ...(await syncClients(a.id)) }); } catch (err) { synced.push({ id: a.id, error: err.message }); }
     }
-    const { accounts, skipped } = cronTargets(await listAccounts({ withStatus: true }));
+    const { accounts, skipped } = await webhookCronTargets(
+      dirtyOnly ? listed : await listAccounts({ withStatus: true }), { ...refreshDeps, dirtyOnly });
     const done = [...skipped];
-    // Stalest first; each account gets min(what is left, 120 s) and the loop
+    // Each account gets min(what is left, 120 s) and the loop
     // runs until the budget is spent, so a big agency is spread over runs.
     for (const a of accounts) {
-      const left = CRON_BUDGET_MS - (Date.now() - started);
+      const left = CRON_BUDGET_MS - (now() - started);
       if (left < CRON_MIN_ACCOUNT_MS) { done.push({ id: a.id, skipped: 'time budget' }); continue; }
       try {
-        const { persisted } = await refreshAccount(a.id, steps, cronAccountBudgetMs(left));
-        done.push({ id: a.id, ok: true, persisted });
+        const result = await refreshAccount(a.id, steps, cronAccountBudgetMs(left), refreshDeps);
+        done.push(result.skipped ? { id: a.id, skipped: result.skipped } : { id: a.id, ok: true, persisted: result.persisted });
       } catch (err) { done.push({ id: a.id, ok: false, error: err.message }); }
     }
-    return res.status(200).json({ ok: true, cron: true, ms: Date.now() - started, budgetMs: CRON_BUDGET_MS, elapsedMs: Date.now() - started, accounts: done, synced, steps });
+    return res.status(200).json({ ok: true, cron: true, ...(dirtyOnly ? { dirtyOnly: true } : {}), ms: now() - started, budgetMs: CRON_BUDGET_MS, elapsedMs: now() - started, accounts: done, synced, steps });
   }
 
   const accountId = await accountFromReq(req);
@@ -113,7 +225,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { snapshot, persisted } = await refreshAccount(accountId, steps, REFRESH_BUDGET_MS);
+    const { snapshot, persisted } = await refreshAccount(accountId, steps, REFRESH_BUDGET_MS, refreshDeps);
 
     res.status(200).json({
       ok: true,
@@ -123,11 +235,11 @@ export default async function handler(req, res) {
       warning: storeConfigured()
         ? undefined
         : 'KV is not configured, so this snapshot was not stored. Set KV_REST_API_URL / KV_REST_API_TOKEN.',
-      ms: Date.now() - started,
+      ms: now() - started,
       // Budget vs. spent, so the client can show how much of the 5 minutes
       // a large account really needed (`ms` is kept for older clients).
       budgetMs: REFRESH_BUDGET_MS,
-      elapsedMs: Date.now() - started,
+      elapsedMs: now() - started,
       steps,
       generatedAt: snapshot.generatedAt,
       templateVersion: snapshot.templateVersion,
@@ -154,9 +266,11 @@ export default async function handler(req, res) {
       detail: err.detail ?? undefined,
       storeConfigured: storeConfigured(),
       steps,
-      ms: Date.now() - started,
+      ms: now() - started,
       budgetMs: REFRESH_BUDGET_MS,
-      elapsedMs: Date.now() - started,
+      elapsedMs: now() - started,
     });
   }
 }
+
+export default createRefreshHandler();

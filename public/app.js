@@ -22,12 +22,12 @@ const CHILD_LEVEL = { traffic: 'campaign', account: 'campaign', campaign: 'adset
 
 /* HYROS-attributed columns wear the lavender band (the site's HYROS-column signature). Cosmetic only. */
 const HY = new Set(['revenue', 'roas']);
-const KPI_HY = 'revenue';
+const KPI_HY = 'totalRevenue';
 
 const KPIS = [
   { key: 'cost',    label: 'Cost',    type: 'money' },
-  { key: 'revenue', label: 'Revenue', type: 'money' },
-  { key: 'profit',  label: 'Profit',  type: 'money', tone: true },
+  { key: 'totalRevenue', label: 'Total Revenue', type: 'money' },
+  { key: 'profit',  label: 'Ad Profit', type: 'money', tone: true },
   { key: 'roas',    label: 'ROAS',    type: 'ratio' },
   { key: 'sales',   label: 'Sales',   type: 'int' },
   { key: 'leads',   label: 'Leads',   type: 'int' },
@@ -70,7 +70,7 @@ const state = {
 /* Where to report a problem with the template (the docs owner keeps this current). */
 const REPO_URL = 'https://github.com/Hyros-AI/hyros-ai';
 
-const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs', '/api/health']);
+const ACCOUNT_SCOPED = new Set(['/api/data', '/api/refresh', '/api/drill', '/api/prefs', '/api/health', '/api/copilot']);
 
 /* Demo mode caches: the real snapshot to restore, and both attribution views. */
 let realCache = null;
@@ -113,12 +113,13 @@ function persistColsLocal() {
  * selected account id rides in the query for the account-scoped routes.
  */
 async function api(path, opts = {}) {
+  const { account = state.account, ...requestOpts } = opts;
   const url = new URL(path, location.origin);
-  if (ACCOUNT_SCOPED.has(url.pathname) && state.account) {
-    url.searchParams.set('account', state.account);
+  if (ACCOUNT_SCOPED.has(url.pathname) && account) {
+    url.searchParams.set('account', account);
   }
   const headers = { ...(opts.headers || {}), ...(state.key ? { 'x-report-key': state.key } : {}) };
-  const res = await fetch(url, { ...opts, headers });
+  const res = await fetch(url, { ...requestOpts, headers });
   if (res.status === 401) throw new Error('unauthorized');
   try {
     return { status: res.status, body: await res.json() };
@@ -175,16 +176,26 @@ function emptySnapshot() {
   };
 }
 
-async function load() {
-  const { body } = await api('/api/data');
+let dataLoadSequence = 0;
+async function load(account = state.account) {
+  const sequence = ++dataLoadSequence;
+  const key = state.key;
+  const demo = state.demo;
+  const current = () => sequence === dataLoadSequence && key === state.key && demo === state.demo;
+  let body;
+  try { ({ body } = await api('/api/data', { account })); }
+  catch (error) { if (!current()) return false; throw error; }
+  if (!current()) return false;
+  if (body.ok === false || (account && body.account !== account)) throw new Error('Account snapshot unavailable.');
   state.origin = body.origin;
   state.templateVersion = body.templateVersion || state.templateVersion;
   state.capabilities = body.capabilities || {};
   state.serverPrefs = body.prefs || null;
-  if (body.account && !state.account) state.account = body.account;
+  if (body.account) state.account = body.account;
   state.snapshot = body.snapshot || emptySnapshot();
   fmt.currency = fmt.currencyCode(state.snapshot.account?.currency); // HYROS reports in the account currency; validated
   pickValidRange();
+  return true;
 }
 
 /* ------------------------------------------------------------------ *
@@ -195,7 +206,7 @@ $('gateForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   state.key = $('gateKey').value.trim();
   try {
-    await load();
+    if (!await load()) return;
     sessionStorage.setItem('aihyros_key', state.key);
     afterSignIn();
   } catch {
@@ -219,7 +230,7 @@ async function boot() {
   if (st === 'needs_storage') { startDemoOnly({ overlay: 'storage' }); return; }
   if (st === 'needs_setup') { showSetup('connect'); return; }
   try {
-    await load();
+    if (!await load()) return;
     afterSignIn();
   } catch {
     $('gate').hidden = false;
@@ -867,15 +878,13 @@ function openReplaceKey(id) {
 
 async function switchAccount(id) {
   if (state.demo) setDemo(false, { silent: true });
-  if (id === state.account && state.origin !== 'none') return;
-  const previous = state.account;
-  state.account = id;
-  localStorage.setItem('aihyros_account', id);
-  state.path = [];
-  resetStageFilter();
+  if (id === state.account && state.origin !== 'none') { dataLoadSequence += 1; return; }
   note('Loading account…');
   try {
-    await load();
+    if (!await load(id)) return;
+    localStorage.setItem('aihyros_account', id);
+    state.path = [];
+    resetStageFilter();
     pickValidRange();
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
     renderActiveFeature();
@@ -883,8 +892,6 @@ async function switchAccount(id) {
     if (state.origin === 'none') firstBuild();
   } catch (err) {
     // The table still shows the previous account, so the selector must too.
-    state.account = previous;
-    if (previous) localStorage.setItem('aihyros_account', previous); else localStorage.removeItem('aihyros_account');
     renderChrome();
     if (!$('acctPanel').hidden) renderAcctPanel();
     const label = state.accounts.find((x) => x.id === id)?.label || id;
@@ -894,19 +901,21 @@ async function switchAccount(id) {
 
 /** An account with no snapshot yet: build it now, then reload. */
 async function firstBuild() {
+  const account = state.account;
   const a = state.accounts.find((x) => x.id === state.account);
   note(`<b>Building the first snapshot for ${esc(a?.label || 'this account')}…</b> pulling reports, CRM, curves and health from the HYROS MCP. Usually under a minute.`);
   const btn = $('refreshBtn');
   btn.disabled = true; btn.textContent = 'Building…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    if (state.account !== account || state.demo) return;
     recordRefresh(body, 'first build');
     if (!body.ok) {
       note(`First build failed: ${esc(failureCopy(body))}${isKeyFailure(body) ? replaceKeyHint : ''}`, true);
       await loadAccounts();
       return;
     }
-    await load();
+    if (!await load(account)) return;
     await loadAccounts();
     pickValidRange();
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
@@ -1035,7 +1044,7 @@ function mountFeatures() {
       tab.textContent = f.manifest.tab;
       tab.title = f.manifest.description || '';
       tab.addEventListener('click', () => selectView(f.id));
-      nav.appendChild(tab);
+      if (f.id === 'warroom') nav.prepend(tab); else nav.appendChild(tab);
       const sec = document.createElement('section');
       sec.className = 'panel feature'; sec.id = `view-${f.id}`; sec.hidden = true; sec.dataset.feature = f.id;
       anchor.insertAdjacentElement('afterend', sec);
@@ -1067,6 +1076,8 @@ function renderFeatureTabs() {
 
 /** The context handed to a feature's render(ctx) — the only API features use. */
 function featureCtx(f) {
+  const account = state.account;
+  const demo = state.demo;
   return {
     id: f.id, manifest: f.manifest,
     root: $(`view-${f.id}`),
@@ -1074,7 +1085,16 @@ function featureCtx(f) {
     demo: state.demo, account: state.account, range: state.range, level: state.level,
     fmt, esc, kpis: kpiTiles, formatCell,
     note, openJourney: (email) => openJourney(email, true),
-    api: (path, opts) => api(path, opts),
+    api: (path, opts) => api(path, { ...opts, account }),
+    reload: async () => {
+      if (state.account !== account || state.demo !== demo || !await load(account)) return;
+      renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm(); renderActiveFeature();
+    },
+    setRange: (range) => {
+      if (!state.snapshot?.ranges?.[range] || state.snapshot.ranges[range].skipped) return;
+      state.range = range;
+      renderRangeChips(); renderReport(); renderActiveFeature();
+    },
     selectView,
   };
 }
@@ -1094,6 +1114,13 @@ function renderActiveFeature() {
 
 document.querySelectorAll('.tabs .tab').forEach((tab) => {
   tab.addEventListener('click', () => selectView(tab.dataset.view));
+});
+
+document.addEventListener('hyros:account', async (event) => {
+  const { accountId, view = 'warroom' } = event.detail || {};
+  if (!state.accounts.some(a => a.id === accountId)) return;
+  await switchAccount(accountId);
+  if (state.account === accountId) selectView(featureById(view) ? view : 'report');
 });
 
 /* ---------- demo mode ---------- */
@@ -1117,6 +1144,7 @@ function pickValidRange() {
 
 function setDemo(on, { silent = false } = {}) {
   if (on === state.demo && !silent) return;
+  dataLoadSequence += 1;
   if (!on && !state.accounts.length) {
     // Nothing to switch back to: the Demo account is the only account.
     note('<b>Demo account.</b> No HYROS account is connected yet — open the account menu (top left) and add your API key to see your own data.');
@@ -1190,14 +1218,16 @@ $('attrPanel').querySelectorAll('.attr-opt').forEach((b) =>
 document.addEventListener('click', () => { $('attrPanel').hidden = true; });
 
 $('refreshBtn').addEventListener('click', async () => {
+  const account = state.account;
   const btn = $('refreshBtn');
   btn.disabled = true;
   btn.textContent = 'Refreshing…';
   try {
     const { body } = await api('/api/refresh', { method: 'POST' });
+    if (state.account !== account || state.demo) return;
     recordRefresh(body, 'refresh');
     if (body.ok) {
-      await load();
+      if (!await load(account)) return;
       renderChrome(); renderRangeChips(); renderReport(); renderCrm(); renderActiveFeature();
       note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
     } else {

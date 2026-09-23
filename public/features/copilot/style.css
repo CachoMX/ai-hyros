@@ -1,0 +1,16 @@
+[data-feature="copilot"] { padding:24px; }
+.cp-header { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }
+.cp-header h2 { font-size:22px;margin:0; }
+.cp-header p { font-size:12px; }
+.cp-suggestions { display:flex;flex-wrap:wrap;gap:8px;padding:20px 0;border-bottom:1px solid var(--border,#ddd); }
+.cp-messages { min-height:260px;max-height:580px;overflow:auto;padding:12px 0; }
+.cp-turn { padding:12px 0;border-bottom:1px solid var(--border,#ddd); }
+.cp-question { font-weight:600;font-size:14px; }
+.cp-answer { white-space:pre-wrap;line-height:1.7;font-size:14px;max-width:900px;overflow-wrap:anywhere; }
+.cp-sources { display:flex;gap:8px;flex-wrap:wrap; }
+.cp-sources button { max-width:100%;white-space:normal;text-align:left; }
+.cp-empty { padding:28px 0;font-size:14px; }
+.cp-empty h3 { font-size:16px; }
+.cp-form { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;border-top:1px solid var(--border,#ddd);padding-top:16px; }
+.cp-form input { min-width:0;border:1px solid var(--border,#ddd);border-radius:4px;padding:12px;background:var(--surface,#fff);color:inherit;font:inherit; }
+@media(max-width:640px) { [data-feature="copilot"]{padding:16px}.cp-header h2{font-size:20px}.cp-messages{max-height:460px} }

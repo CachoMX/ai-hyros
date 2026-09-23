@@ -42,15 +42,14 @@ export function demo(snapshot) {
     ...[...block.levels.adset].sort((a, b) => b.cost - a.cost).slice(0, 6)
       .map((a) => ({ id: a.id, name: a.name, level: 'SOURCE_LINK', category: a._category, daily: a.cost / 30 })),
   ];
-  const curves = targets.map((t, i) => {
+  const curves = targets.map((t) => {
     const account = t.level === 'ACCOUNT';
     const ceiling = account ? null : round2(jitter(r, 120, 0.15));
     const base = jitter(r, 55, 0.2);
     const steep = 0.35 + r() * 0.9;
     const days = 8 + Math.floor(r() * 4);
     const points = curvePoints(t.daily, base, steep, days);
-    // A couple of prospecting sets keep scaling inside the observed range.
-    const sat = i % 3 === 1 ? saturation(points, null) : saturation(points, ceiling);
+    const sat = saturation(points, ceiling);
     return {
       id: t.id, name: t.name, level: t.level, category: t.category,
       attributionModel: 'FIRST_CLICK', daysSampled: POINTS * days,
@@ -59,5 +58,5 @@ export function demo(snapshot) {
     };
   });
   const today = ymd(new Date());
-  return { checkedAt: `${today}T08:00:00.000Z`, window: { start: ymd(daysAgo(89)), end: today }, curves };
+  return { checkedAt: `${today}T08:00:00.000Z`, window: { start: ymd(daysAgo(89)), end: today }, configuredCeiling: null, curves, notes: [] };
 }

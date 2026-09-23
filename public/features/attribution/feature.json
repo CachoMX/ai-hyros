@@ -1,0 +1,14 @@
+{
+  "id": "attribution",
+  "name": "Attribution Lab",
+  "tab": "Attribution Lab",
+  "version": "1.0.0",
+  "description": "Compare attribution models over a bounded conversion cohort.",
+  "mode": "both",
+  "demo": true,
+  "server": true,
+  "style": true,
+  "needs": [],
+  "tools": ["hyros_get_conversion_paths"],
+  "author": "AI HYROS"
+}

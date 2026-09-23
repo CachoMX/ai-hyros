@@ -8,8 +8,7 @@
  */
 import { startMock, calls, mock } from './mock-mcp.mjs';
 
-const PORT = 4322;
-process.env.HYROS_MCP_URL = `http://127.0.0.1:${PORT}/mcp`;
+const PORT = 0;
 process.env.HYROS_API_KEY = 'mock';
 
 const { buildSnapshot } = await import('../api/_snapshot.js');
@@ -22,6 +21,7 @@ const check = (name, ok, extra = '') => {
 };
 
 const server = await startMock(PORT);
+process.env.HYROS_MCP_URL = `http://127.0.0.1:${server.address().port}/mcp`;
 try {
   console.log('\nRefresh budget: one constant (REFRESH_MAX_S) drives maxDuration, vercel.json, the build and the cron');
   const budget = await import('../api/_budget.js');
@@ -305,7 +305,7 @@ try {
   // nearly the whole budget: 100 s -> a 50 s fair share, raised to the floor.
   const snapFeat = await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, budgetMs: 100000, onProgress: (s) => featSteps.push(s) });
   const shareOf = (id) => Number((featSteps.find((s) => s.startsWith(`feature ${id} (`)) || '').match(/\((\d+)s\)/)?.[1]);
-  check('scale gets the 60 s floor (not its 50 s fair share); health (last) gets everything left (~100 s)', shareOf('scale') === 60 && shareOf('health') >= 95 && snapFeat.health.scripts['https://example.test/'] === 'SCRIPT_FOUND', JSON.stringify(featSteps.filter((s) => /^feature/.test(s))));
+  check('remote steps get the floor; the final remote step inherits remaining time without local modules diluting its share', shareOf('attribution') === 60 && shareOf('health') === 60 && shareOf('scale') >= 95 && snapFeat.health.scripts['https://example.test/'] === 'SCRIPT_FOUND', JSON.stringify(featSteps.filter((s) => /^feature/.test(s))));
   const fullSteps = [];
   await buildSnapshot({ now: new Date('2026-09-14T12:00:00Z'), prefs, onProgress: (s) => fullSteps.push(s) });
   check('unspent core + CRM time flows to the features: on the full budget both steps get well over the floor', fullSteps.some((s) => /^feature scale \((\d+)s\)$/.test(s) && Number(s.match(/\((\d+)s\)/)[1]) >= 100), JSON.stringify(fullSteps.filter((s) => /^feature/.test(s))));

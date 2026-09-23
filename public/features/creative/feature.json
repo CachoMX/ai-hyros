@@ -1,0 +1,5 @@
+{
+  "id": "creative", "name": "Creative Intelligence", "tab": "Creative", "version": "1.0.0",
+  "description": "Configured name groups, variant concentration, and comparable observed periods.",
+  "mode": "both", "demo": true, "server": true, "style": true, "needs": [], "tools": [], "author": "AI HYROS"
+}

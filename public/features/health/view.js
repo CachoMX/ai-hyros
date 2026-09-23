@@ -4,7 +4,8 @@
  * (block.checks: ok | empty | skipped | failed, with the reason), so a "—"
  * is never left unexplained and no empty state is invented.
  */
-const SCRIPT_OK = new Set(['SCRIPT_FOUND', 'FOUND', 'OK', 'PRESENT', 'INSTALLED']);
+import { SCRIPT_OK, parameterState, scriptState } from './diagnostics.js';
+import { wizardMarkup, wireWizard } from './wizard.js';
 // snapshot.warnings[].kind -> pill text. Skips are quiet, failures are bad.
 const WARN_LABEL = { unsupported: 'skipped: unsupported', 'time budget': 'skipped: time budget', rate_limited: 'rate limited', truncated: 'truncated', error: 'error' };
 const WARN_BAD = new Set(['rate_limited', 'error']);
@@ -84,9 +85,8 @@ function checksPanel(checks, h, fmt, esc) {
     params: checks.params.status === 'ok' || checks.params.status === 'empty' ? channelsSub(checks.params, '') : '',
   };
   return `<div class="fpanel"><h3>Checks this refresh</h3>
-    <div class="fhint">what each HYROS check did — a skip is not an error, a failure is</div>
     ${Object.entries(checks).map(([id, c]) => `<div class="health-row"><span class="pill ${STATUS_PILL[c.status] || ''}">${esc(c.status)}</span><code>${esc(CHECK_NAME[id] || id)}</code>
-      <span class="health-msg">${esc(c.status === 'ok' || c.status === 'empty' ? detail[id] || (c.status === 'empty' ? 'ran, nothing found' : '') : (c.reason || ''))}</span>
+      <span class="health-msg">${esc(c.status === 'ok' || c.status === 'empty' ? [detail[id] || (c.status === 'empty' ? 'ran, nothing found' : ''), c.reason].filter(Boolean).join(' / ') : (c.reason || ''))}</span>
       ${Number.isFinite(c.ms) ? `<span class="sub">${esc(`${(c.ms / 1000).toFixed(1)} s`)}</span>` : ''}</div>`).join('')}
   </div>`;
 }
@@ -94,7 +94,6 @@ function checksPanel(checks, h, fmt, esc) {
 /** Every error, full size: a bad pill with the check name, then its message. */
 function errorsPanel(errors, esc) {
   return `<div class="fpanel health-errors"><h3>Check errors</h3>
-    <div class="fhint">each line is one check's own message from this refresh</div>
     ${errors.map((e) => { const i = String(e).indexOf(': '); const name = i > 0 ? String(e).slice(0, i) : 'check'; const msg = i > 0 ? String(e).slice(i + 2) : String(e);
       return `<div class="health-row"><span class="pill bad">${esc(name)}</span><span class="health-msg">${esc(msg)}</span></div>`; }).join('')}
   </div>`;
@@ -118,7 +117,7 @@ function groupSites(sites, scripts) {
 function siteRow(g, checks, stale, fmt, esc) {
   const pill = !g.checked ? '<span class="pill">not checked</span>'
     : g.found ? `<span class="pill ok">script found${g.foundOn.some((u) => /\/\/www\./.test(u)) && !g.foundOn.some((u) => !/\/\/www\./.test(u)) ? ' (on www)' : ''}</span>`
-    : '<span class="pill bad">script not found</span>';
+    : g.variants.every((v) => scriptState(v.status) === 'missing') ? '<span class="pill bad">script not found</span>' : '<span class="pill warn">incomplete result</span>';
   const variants = g.variants.map((v) => `<span class="sub">${esc(v.url)} · ${esc(v.status === null ? 'not checked' : String(v.status).toLowerCase().replace(/_/g, ' '))}</span>`).join('');
   return `<div class="health-row health-site"><code title="${esc(g.site)}">${esc(g.site)}</code>
     <span class="sub">tracking domain ${esc(g.trackingDomain)}</span>
@@ -127,9 +126,13 @@ function siteRow(g, checks, stale, fmt, esc) {
 }
 
 export function render(ctx) {
-  const { fmt, esc, kpis, snapshot } = ctx;
+  const { fmt, esc, kpis, snapshot = {} } = ctx;
   const h = ctx.block;
-  if (!h) { ctx.root.innerHTML = '<div class="fpanel"><div class="empty">No health check in this snapshot — hit Refresh.</div></div>'; return; }
+  if (!h) {
+    ctx.root.innerHTML = '<div class="note">No health check in this snapshot.</div>' + wizardMarkup(ctx);
+    wireWizard(ctx, () => render(ctx));
+    return;
+  }
   // Only a block with a checkedAt actually ran; a bare { skipped } did not.
   const notRun = !h.checkedAt;
   const checks = { ...legacyChecks(h), ...(h.checks || {}) };
@@ -143,7 +146,7 @@ export function render(ctx) {
   const sitesOk = siteGroups.filter((g) => g.found).length;
   const useSites = siteGroups.length > 0;
   const paramRows = (h.trackingParams || []).flatMap((p) => (p.rows || []).map((r) => ({ ...r, _type: p.type })));
-  const flagged = paramRows.filter((r) => r && (r.valid === false || r.missing || r.ok === false || /missing|invalid/i.test(JSON.stringify(r))));
+  const flagged = paramRows.filter((r) => parameterState(r) === 'missing');
   const errors = (h.errors || []).map(String);
   const acct = snapshot.account || {};
   const warnings = Array.isArray(snapshot.warnings) ? snapshot.warnings : [];
@@ -159,10 +162,8 @@ export function render(ctx) {
     : (statusLine(checks.params) || (checks.params.status === 'empty' ? 'No ads reported by the check in the last hour.' : 'No check result.')));
 
   ctx.root.innerHTML = `
-    <div class="note"><b>Tracking Health.</b> Is the HYROS script actually on your
-      domains, and do your ad links carry the parameters attribution needs? Checked by HYROS itself
-      (<code>hyros_assert_script_presence_on_domain</code>, <code>hyros_check_tracking_parameters_for_integrations</code>)
-      ${h.checkedAt ? `at ${esc(fmt.datetime(h.checkedAt))}` : ''}.
+    <div class="note"><b>Tracking Health.</b>
+      ${h.checkedAt ? `Checked ${esc(fmt.datetime(h.checkedAt))}.` : 'No completed check.'}
       ${h.error ? `<br><b>Error:</b> ${esc(h.error)}` : ''}${status}
       ${ctx.demo ? ' <span class="pill warn">demo</span>' : ''}</div>
     <div class="kpis">${kpis([
@@ -176,10 +177,11 @@ export function render(ctx) {
           : (!hasGoogle && !notRun ? 'no Google ad accounts' : checkSub(checks.params, { notRun, emptyText: `${channelsSub(checks.params, 'checked')}: no ads in the last hour` })) },
       { label: 'Check errors', value: notRun ? '—' : fmt.int(errors.length), cls: errors.length ? 'bad' : '', sub: errors.length ? shortReason(errors[0]) : (notRun ? 'not checked' : 'none') },
     ])}</div>
+    ${wizardMarkup(ctx)}
     ${notRun ? '' : errors.length ? `<div class="fcols">${checksPanel(checks, h, fmt, esc)}${errorsPanel(errors, esc)}</div>` : checksPanel(checks, h, fmt, esc)}
     <div class="fcols">
       <div class="fpanel"><h3>Script presence</h3>
-        <div class="fhint">the universal script, fetched and inspected on the site behind each verified tracking domain (apex and www, up to 3 URLs — the MCP's limit)</div>
+        <div class="fhint">Sampled apex and www URLs; other landing and checkout pages are not checked.</div>
         ${scriptStale || (checks.script.status !== 'ok' && !notRun && statusLine(checks.script)) ? statusRow(checks.script, esc, `${statusLine(checks.script) || ''}${scriptStale ? ` Showing the previous check${checks.script.checkedAt ? ` from ${fmt.datetime(checks.script.checkedAt)}` : ''}.` : ''}`) : ''}
         ${scripts.length ? (useSites ? siteGroups.map((g) => siteRow(g, checks, scriptStale, fmt, esc)).join('') : scripts.map(([url, st]) => {
           const ok = SCRIPT_OK.has(String(st).toUpperCase());
@@ -189,7 +191,6 @@ export function render(ctx) {
         }).join('')) : (statusLine(checks.script) && !notRun ? '' : `<div class="empty">${esc(scriptLine)}</div>`)}
       </div>
       <div class="fpanel"><h3>Account &amp; access</h3>
-        <div class="fhint">connected ad accounts and agency relationships (MCP: allowedAccounts / accessibleAccounts)</div>
         ${(snapshot.adAccounts || []).map((a) => `<div class="health-row"><code>${esc(a.name)}</code><span class="pill">${esc(a.type)}</span><span class="sub">${esc(a.id)}</span>${warningPills(a, warnings, esc)}</div>`).join('')}
         ${(acct.managedBy || []).map((a) => `<div class="health-row"><code>managed by ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
         ${(acct.clients || []).map((a) => `<div class="health-row"><code>client ${esc(a.email || a.company || a.accountId || '—')}</code><span class="pill ${a.status === 'APPROVED' ? 'ok' : ''}">${esc(a.status || '')}</span></div>`).join('')}
@@ -197,12 +198,14 @@ export function render(ctx) {
       </div>
     </div>
     <div class="fpanel"><h3>Ad link tracking parameters</h3>
-      <div class="fhint">per ad, whether the parameters HYROS needs are present and well-formed (Google channels seen in the last hour)</div>
+      <div class="fhint">Google channels seen in the last hour. Other platforms are not checked.</div>
       ${paramRows.length ? paramRows.slice(0, 50).map((r) => {
-        const bad = flagged.includes(r);
+        const state = parameterState(r);
+        const bad = state === 'missing';
         const label = r.adName || r.name || r.ad || r.adId || r.id || JSON.stringify(r).slice(0, 80);
         return `<div class="health-row"><span class="pill">${esc(r._type)}</span><code title="${esc(JSON.stringify(r))}">${esc(String(label))}</code>
-          <span class="pill ${bad ? 'bad' : 'ok'}">${bad ? 'missing / invalid' : 'ok'}</span></div>`;
+          <span class="pill ${bad ? 'bad' : state === 'ok' ? 'ok' : ''}">${bad ? 'missing / invalid' : state === 'ok' ? 'ok' : 'unknown result'}</span></div>`;
       }).join('') : (hasGoogle && !notRun && statusLine(checks.params) ? statusRow(checks.params, esc, paramsLine) : `<div class="empty">${esc(paramsLine)}</div>`)}
     </div>`;
+  wireWizard(ctx, () => render(ctx));
 }

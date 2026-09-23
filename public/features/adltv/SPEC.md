@@ -1,67 +1,129 @@
-# Ad LTV — feature spec
+# Ad LTV
 
-**id** `adltv` · **mode** demo · **version** 1.0.0
+**id** `adltv` | **mode** both | **version** 2.0.0
 
 ## Purpose
-For the top 5 ads by credited revenue: how the value of the customers each
-ad created grows over 60 days (first purchase → LTV 30 → LTV 60), which
-OTHER traffic sources those customers also clicked, and which assisting
-source produced the most closed calls.
+
+Inspect observed revenue by lead and opening source, repeat-purchase flags,
+mature first-purchase cohorts, native report LTV, and evidence-backed
+hidden-winner candidates. Keep these populations and measures distinct.
 
 ## Data
-- Reads `snapshot.ranges['30d']` ad + ad-set rows (name, parentName,
-  revenue, sales, uniqueCustomers).
-- Demo only today. Two possible live paths:
-  1. **Per-lead assembly**, per top ad: the customer cohort
-     (`hyros_get_leads` filtered by the ad's source tag), their sales over
-     60 days (`hyros_get_sales` by `leadIds`; the documented REST LTV field
-     is `60_days_ltv` — the MCP `fields` enum casing for it is undocumented,
-     so verify against `tools/list` before relying on `LTV_60_DAYS`), their
-     click history (`hyros_get_clicks` / `hyros_get_lead_journey`) and calls
-     (`hyros_get_calls`). All exist but are per-lead.
-  2. **Reports**: `hyros_generate_public_report` (+ `hyros_poll_public_report_result`) with `groupBy: JOURNEY` (the
-     customer paths, `journeySteps` per journey) and `groupBy:
-     SALE_ITEM_LTV` (LTV per sale item) — async (generate, then poll), and
-     the closest thing to a bulk endpoint today; see FINDINGS.md "Sept 2026
-     MCP upgrade".
-- **Caps to budget for** (FEATURES.md "MCP limits"): ≤ 50 `leadIds` /
-  `emails` per call; `hyros_get_lead_journey` ≤ 50 leads per call;
-  `pageSize` ≤ 250; one rate limit per HYROS account, shared by every key
-  of the account (an agency's clients included); `accessible_account_id` is
-  already applied by `ctx.callTool`. Budget the server step against
-  `ctx.timeLeft()` (see FEATURES.md "server.js").
 
-## Block shape (`snapshot.adltv`)
-```json
-{ "window": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" },
-  "rows": [{ "rank": 1, "name": "", "adset": "", "campaign": "", "customers": 0,
-             "revenue60": 0, "ltv0": 0, "ltv30": 0, "ltv60": 0, "mult": 1.5,
-             "assists": [{ "name": "", "kind": "email|organic|ads", "pct": 0.4, "touched": 0, "closedCalls": 0 }] }],
-  "callLeaders": [{ "name": "", "kind": "", "closedCalls": 0, "touched": 0 }] }
+No tool calls or fetches. Reads `snapshot.attribution` (the normalized
+conversion-path contract), `snapshot.crm`, and `snapshot.ranges['30d']`.
+Attribution must run first and the runner must expose earlier feature blocks.
+
+Native LTV comes only from numeric `ltv30Days`, `ltv60Days`, `ltv90Days` in
+the core ad report, using account currency. Forecasts are not treated as LTV.
+Native values are not summed, blended with observed revenue, or relabeled
+as an independently verified mature cohort.
+
+## Block Shape
+
+Live blocks use `mode: 'observed'`:
+
+```js
+{
+  mode: 'observed', checkedAt, window: { start, end }, pathStatus, pathReason,
+  summary: { sales, first, repeat, unclassified, unlinked },
+  totals: [{ currency, sales, first, repeat, unknown, revenue, unknownAmounts }],
+  rows: [{ key, name, adId, platform, currency, leads, sales, first, repeat,
+    unknown, revenue, unknownAmounts }],
+  leads: [{ leadId, source, sourceKey, currency, sales, first, repeat,
+    unknown, revenue, unknownAmounts }],
+  candidates: [{ key, name, adId, platform, conversions, late, multiTouch,
+    examples: ['sale-id'], native: null | { currency, ltv30, ltv60, ltv90 } }],
+  native: [{ id, name, currency, ltv30, ltv60, ltv90, stale, window }],
+  cohorts: { basis: 'observed-first-purchase-cohorts', window, checkedAt,
+    complete, reason, rows: [{ key, name, currency, customers,
+      horizons: [{ days: 0 | 30 | 60 | 90, mature, immature, unknown,
+        revenue, value, status: 'mature' | 'immature' | 'unknown' }] }] },
+  coverage: { sampled, complete, truncated }, truncated, errors: []
+}
 ```
 
-## View states
-Demo-only today, but the view still renders every runner state: a block
-without `rows` / `callLeaders` (`{ error }`, `{ skipped }`, `{}`) shows a
-status line; a stale block (`stale: true, skipped`) shows the data with
-"Showing the previous result". Every data string, including the top ad's
-name in the KPI sub, goes through `ctx.esc`.
+The existing demo/legacy view is preserved for blocks without the live
+discriminator: `{ window, rows: [{ rank, name, adset, campaign, customers,
+revenue60, ltv0, ltv30, ltv60, mult, assists }], callLeaders }`. Its two-month
+LTV, assist percentages, and closed-call counts are seeded illustrations.
+Old snapshots still render; live builders never substitute synthetic data.
 
-## Rules honoured
-- One row per distinct creative (the same ad name in several ad sets keeps
-  its best instance).
-- Money through `ctx.fmt.money` (whole dollars in demo mode).
+## Verified History Contract
 
-## Porting notes
-Everything the view needs is in the block; another app only has to produce
-the block shape above to reuse `view.js` + `style.css` unchanged.
+Path-date sales alone never satisfy this contract, even when all path pages
+were fetched. Cohort computation needs separately verified lead sales:
 
-## Open limitations
-- Illustrative numbers: cohorts, LTV steps, assists and closed calls are
-  generated from the demo snapshot, not measured.
-- Going live needs either the per-lead assembly (50 leads per call, so
-  ~5 ads × cohort size / 50 calls) or the `JOURNEY` / `SALE_ITEM_LTV`
-  reports; what is still missing for a cheap version is the aggregate
-  clicks endpoint (FINDINGS.md "Aggregate clicks endpoint") and a
-  `TOUCHED` attribution mode (FINDINGS.md "`attributionMode: CREDIT |
-  TOUCHED`").
+```js
+snapshot.attribution.history = {
+  basis: 'lead-sales', complete: true, truncated: false, stale: false,
+  checkedAt: 'ISO timestamp', window: { start: 'ISO/date', end: 'ISO/date' },
+  sales: [{ id, leadId, date, amount, currency, firstSale,
+    source: { id, name, adId, adName, platform } }]
+};
+```
+
+This optional extension is not fabricated by the path builder. If absent,
+the feature can use core CRM sales only when pagination explicitly finished
+(`crm.sync.truncated.sales === false`), the CRM window is known, and rows
+carry exact boolean firstSale flags. CRM sales join to lead IDs by leadId or
+email; only IDs enter the output block. Existing core snapshots that omit
+firstSale therefore correctly display unknown cohorts.
+
+## Rules Honoured
+
+- Only SALE contributes purchase counts/revenue; CALL firstSale is never
+  used. Duplicate sale IDs count once. Repeats require firstSale === false;
+  recurring is ignored, and absent flags stay unknown.
+- Each observed sale belongs to its earliest eligible path touch, ordered
+  by timestamp, excluding disregarded, undated and post-conversion touches.
+  Empty paths go to `No eligible touch`. Source/ad identity and currency
+  partition rows. A lead can appear under several observed opening sources.
+- Observed revenue is before independent refunds/cost adjustments. Null
+  amounts remain unknown, partial totals disclose missing amounts, and
+  currencies are never added together. Counts do not require known prices.
+- A cohort anchor requires exactly one confirmed first purchase per lead.
+  Time 0 is that purchase's amount, not lifetime revenue or first observed
+  sale. Day N is cumulative lead sales through the inclusive N-day boundary.
+- A mature value requires known currency/amounts, consistent lead currency,
+  complete nonstale history beginning at/before the first purchase, and
+  coverage through the entire horizon. Unknown dates, contradictory earlier
+  sales, truncation and missing coverage make the value unknown. Too-young
+  customers are immature. Date-only coverage ends include that full day,
+  capped at the current observation time.
+- Horizon averages use only eligible mature leads, disclose mature,
+  immature and unknown counts, and may have different denominators. These
+  are observed first-purchase cohorts, not all acquired customers of an ad.
+- Candidates are opening/pre-close sources with a >=7-day delay or more
+  than one eligible touch. They carry sale IDs and evidence counts. A single
+  exact ad-ID match can add nonstale native LTV evidence. No name matching,
+  causal-lift claim, winner guarantee, or automatic budget recommendation.
+- Up to 2,000 sales, 120 source and lead rows, 100 native/cohort rows, and
+  40 candidates. Omissions are explicit. Entire leads' histories remain
+  intact during computation; display caps do not change denominators.
+
+## View States
+
+Fresh, stale, bare skipped, error, null and empty objects are tolerated.
+Stale path data carries its own checkedAt and says previous. Missing paths
+can still show native LTV. Native report freshness is separately labeled.
+Spent budgets make no calls and preserve previous data with stale markers.
+
+Controls filter observed/native/cohort tables by currency, sort sources,
+search lead IDs/sources, and select candidates. Global sample KPIs and
+candidate evidence remain across all currencies. Optional DOM APIs are
+guarded for conformance stubs. All data strings are escaped.
+
+## Porting Notes
+
+Copy this folder; analytics/server code has no imports outside it. The
+preserved demo also imports the host's seeded demo helpers. Provide feature
+context formatters and design tokens. Focused verification:
+`node scripts/journey-analytics-test.mjs`.
+
+## Open Limitations
+
+The normal 30-day snapshot often cannot certify 60/90-day cohorts. That
+absence is unknown, not zero or a modeled estimate. Native HYROS LTV uses
+its own underlying populations and windows. Refund history, margin and
+full acquisition cohorts are outside this feature's observed revenue data.

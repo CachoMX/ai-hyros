@@ -1,0 +1,6 @@
+{
+  "id": "copilot", "name": "Evidence Copilot", "tab": "Copilot", "version": "1.0.0",
+  "description": "Snapshot-grounded answers and source links, without autonomous campaign changes.",
+  "mode": "both", "demo": true, "server": true, "style": true,
+  "needs": [], "tools": [], "author": "Mosaide"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "portfolio",
+  "name": "Agency Portfolio",
+  "tab": "Portfolio",
+  "version": "1.0.0",
+  "description": "Registered account performance and snapshot health.",
+  "mode": "both",
+  "demo": true,
+  "server": true,
+  "style": true,
+  "needs": [],
+  "tools": [],
+  "author": "AI HYROS"
+}

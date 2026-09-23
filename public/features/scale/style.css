@@ -1,9 +1,9 @@
 /* Scale Advisor — feature-scoped styles */
-.scale-card { padding-bottom: 14px; }
+.scale-card { padding: 18px 0; border-bottom: 1px solid var(--border); min-width: 0; letter-spacing: 0; }
 .scale-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .scale-head b { font-size: 14.5px; font-weight: 500; }
 .scale-head .sub { flex: 1; }
-.scale-verdict { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.scale-verdict { font-size: 13px; font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .scale-verdict { white-space: normal; } }
 /* The plot fills the card; its height follows the width (aspect ratio) so a wide screen gets a taller chart, not a flatter one. */
 .scale-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: start; }
@@ -27,6 +27,42 @@
 .scale-legend i.ceil { border-top-style: dotted; border-color: var(--bad); }
 .scale-legend i.sat { border-color: var(--good); }
 .scale-stats { display: grid; gap: 8px; }
-.scale-stat { padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.scale-stat { padding: 9px 0; border-bottom: 1px solid var(--rule); }
 .scale-stat .kpi-label { margin-bottom: 3px; }
 .scale-stat b { font-family: var(--serif); font-weight: 400; font-size: 17px; font-variant-numeric: tabular-nums; }
+.scale-head b, .scale-head .sub { min-width: 0; overflow-wrap: anywhere; }
+.scale-stats { margin: 0; }
+.scale-stat dt, .scale-scenario dt { color: var(--ink-3); font: 10.5px var(--mono); text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0; }
+.scale-stat dd { font: 400 17px var(--serif); margin: 0 0 4px; }
+.scale-stat .sub { display: block; }
+.scale-caveat { font-size: 13px; line-height: 1.5; color: var(--ink-2); overflow-wrap: anywhere; }
+.scale-controls { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; padding: 14px 0; border-block: 1px solid var(--border); margin: 16px 0 0; }
+.scale-controls label, .scale-scenario label { display: grid; gap: 6px; font-size: 12px; min-width: 0; }
+.scale-controls input { width: 210px; max-width: 100%; }
+.scale-controls .sub { flex: 1 1 230px; padding-bottom: 5px; }
+.scale-controls button { white-space: normal; }
+.scale-controls *, .scale-scenario *, .scale-card summary { letter-spacing: 0; }
+.scale-scenario { display: grid; grid-template-columns: minmax(150px, 0.6fr) minmax(0, 2fr); gap: 10px 24px; padding: 14px 0; margin-top: 14px; border-top: 1px solid var(--rule); }
+.scale-scenario select { width: 100%; min-width: 0; }
+.scale-scenario dl { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; margin: 0; align-content: center; }
+.scale-scenario dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.scale-scenario p, .scale-scenario > .sub { grid-column: 1 / -1; margin: 0; font-size: 12px; }
+.scale-chart .comparison { stroke: var(--ink-2); stroke-width: 1.3; stroke-dasharray: 8 3 2 3; }
+.scale-legend i.comparison { border-color: var(--ink-2); border-top-style: dashed; }
+.scale-history { margin-top: 10px; }
+.scale-history summary { cursor: pointer; font-size: 12px; padding: 8px 0; }
+.scale-table-wrap { overflow-x: auto; }
+.scale-history table { width: 100%; min-width: 450px; font-size: 12px; }
+.scale-history td, .scale-history th { padding: 8px; border-bottom: 1px solid var(--rule); }
+.scale-unavailable h3 { font: 400 19px var(--serif); }
+@media (max-width: 600px) {
+  .scale-scenario { grid-template-columns: minmax(0, 1fr); }
+  .scale-scenario dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scale-scenario dl > :last-child { grid-column: 1 / -1; }
+  .scale-controls label { flex: 1 1 100%; }
+  .scale-controls input { width: 100%; box-sizing: border-box; }
+  .scale-xlabels { gap: 5px; }
+  .scale-xlabels span { font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
+  .scale-xlabels span:nth-child(2) { text-align: center; }
+  .scale-xlabels span:last-child { text-align: right; }
+}

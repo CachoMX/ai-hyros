@@ -1,0 +1,5 @@
+{
+  "id": "profit", "name": "Profit Engine", "tab": "Profit", "version": "1.0.0",
+  "description": "Contribution, break-even ROAS, and account-local cost assumptions.",
+  "mode": "both", "demo": true, "server": true, "style": true, "needs": [], "tools": [], "author": "AI HYROS"
+}

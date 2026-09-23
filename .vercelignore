@@ -1,22 +1,25 @@
-# Nothing here is needed at runtime — keep the deployment bundle to the app.
-# data/seed.json is read only by scripts/ (the dev server, the self-test and
-# make-seed); api/ reads the Upstash store alone and the Demo account is
-# generated in the browser from public/demo.js.
+.vercel/
+node_modules/
 data/
-scripts/
 .github/
-.claude/
 dist/
-shots/
 scratchpad/
 *.zip
-*.log
-README.md
-FINDINGS.md
-FEATURES.md
-UI-STYLE-GUIDE.md
-CLAUDE.md
 CHANGELOG.md
-.env.example
 .gitignore
 .vercelignore
+.env*
+.git
+.agents
+.codex
+.claude
+shots
+*.log
+docs
+scripts
+CONTEST-RESEARCH.md
+README.md
+FEATURES.md
+FINDINGS.md
+CLAUDE.md
+UI-STYLE-GUIDE.md

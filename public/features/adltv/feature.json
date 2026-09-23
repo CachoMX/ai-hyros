@@ -2,12 +2,13 @@
   "id": "adltv",
   "name": "Ad LTV",
   "tab": "Ad LTV",
-  "version": "1.0.0",
-  "description": "Long-term value of the customers each top ad created, followed for 2 months, plus the other sources those customers clicked and which of them closed the most calls.",
-  "mode": "demo",
+  "version": "2.0.0",
+  "description": "Observed revenue, first and repeat purchases, verified cohort maturity, native LTV and hidden-winner candidates.",
+  "mode": "both",
   "demo": true,
-  "server": false,
+  "server": true,
   "style": true,
-  "needs": ["ranges.30d"],
+  "needs": [],
+  "tools": [],
   "author": "HYROS"
 }

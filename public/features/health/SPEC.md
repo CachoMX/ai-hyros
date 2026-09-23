@@ -1,6 +1,6 @@
 # Tracking Health — feature spec
 
-**id** `health` · **mode** both (live + demo) · **version** 1.1.0
+**id** `health` · **mode** both (live + demo) · **version** 1.2.0
 
 ## Purpose
 Answer "is tracking actually working?" with HYROS's own checks: the
@@ -49,12 +49,14 @@ envelope, or an array of `{ url | domain, status | result | present }` is
 accepted; anything else makes the check **failed** with reason
 `unexpected reply shape` instead of an empty result. Parameter rows are
 taken from a bare array, `result`, `ads`, or a single object; the view
-flags a row when `valid === false`, `missing` exists, `ok === false`, or
-the row text mentions missing/invalid.
+flags a row only from explicit diagnostic fields: `valid === false`,
+`ok === false`, nonempty `missing` / `missingParameters`, or a recognized
+failure status. Ad names containing "missing" and empty missing arrays do
+not count as failures. Unrecognized results remain unknown.
 
 ### Timeouts
 - Checks 1 and 2 use the default per-call timeout (`ctx.timeouts?.default`,
-  else 15 s; never more than 15 s).
+  else 15 s; never more than 15 s or the remaining time minus 2 s).
 - Check 3 uses the runner's **slow lane**: `ctx.timeouts?.slow` (45 s when
   the runner offers `timeouts` without `slow`), capped at
   `ctx.timeLeft() - 2000` so it always ends inside the step. If fewer than
@@ -64,6 +66,8 @@ the row text mentions missing/invalid.
   stub is such a runner).
 - A timeout is recorded as `status: 'failed'` with reason
   `HYROS did not answer within Ns (the check fetches every domain live)`.
+- Only the first script batch uses the slow lane; later batches use the
+  default timeout clamped to the remaining budget.
 
 ### Budget
 `ctx.timeLeft()` is checked before the FIRST call (zero calls on a spent
@@ -158,6 +162,37 @@ truncated | time budget) gets a pill with the kind (e.g. "skipped:
 unsupported") and the message as its title.
 
 ## Porting notes
+### Fix wizard
+`diagnostics.js` derives issues from direct script results, explicit ad
+parameter diagnostics, missing verified domains and check coverage. It
+adapts Mosaide's finding/evidence/fix-step structure without importing its
+server dependencies or proxy scores. Missing attribution is not treated
+as proof of broken tracking. Unknown and partial results are coverage
+issues, not confirmed installation defects.
+
+`wizard.js` adds issue selection, diagnosis, correction checklists, a
+Markdown remediation export and recheck states. The checklists propose
+manual work; they never fabricate account-specific installation code or
+click IDs. Checked steps are self-reported and do not resolve issues.
+Selections and checklists live only in memory for the current account and
+snapshot. Exports include evidence dates, stale/demo labels and the actual
+recheck result. No tracking preference or URL-rule write tools are used.
+
+Recheck calls only `ctx.api('/api/refresh', { method: 'POST' })`. It handles
+pending, failed, not-persisted, reload-required, still-open, inconclusive
+and verified states. `ok: true` alone is not verification. After confirmed
+persistence, optional `ctx.reload()` installs the new host snapshot and
+rerenders the feature. The wizard compares its original issue against that
+new context. An optional portable `ctx.reloadSnapshot()` bridge can instead
+install and return the full snapshot. With neither bridge, the result
+explicitly requires a snapshot reload and offers a page reload button.
+
+Verification requires a newer completed check and a positive result for
+the same site or ad. A disappeared ad, stale script, skipped check, or
+missing bridge never counts as resolved. Async outcomes from a different
+account or superseded snapshot are ignored. Browser-only DOM and download
+APIs are guarded so minimal conformance stubs still render.
+
 Another app needs the block above; `view.js` + `style.css` reuse
 unchanged. HYROS-specific: the three tools, the `{ domains }` /
 `{ request: { type } }` argument guesses, `snapshot.warnings` (core

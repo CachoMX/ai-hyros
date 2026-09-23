@@ -1,0 +1,22 @@
+#view-profit { min-width: 0; letter-spacing: 0; }
+.profit-context, .profit-controls, .profit-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.profit-context { justify-content: space-between; margin: 12px 0; color: var(--ink-2); font: 11px var(--mono); }
+.profit-settings { border-block: 1px solid var(--border); padding: 12px 0; margin-bottom: 14px; }
+.profit-settings > summary { cursor: pointer; font-size: 14px; }
+.profit-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; margin: 14px 0; }
+.profit-fields label, .profit-controls label { display: grid; gap: 6px; min-width: 0; font: 11px var(--mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.profit-fields input, .profit-fields select, .profit-controls input, .profit-controls select { width: 100%; min-width: 0; box-sizing: border-box; font: 13px var(--sans); }
+.profit-controls { margin: 16px 0; }
+.profit-controls label:first-child { flex: 1 1 200px; }
+.profit-caveats { line-height: 1.6; overflow-wrap: anywhere; }
+.profit-scroll { overflow: auto; max-width: 100%; border-block: 1px solid var(--border); }
+.profit-table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.profit-table th, .profit-table td { padding: 11px 12px; border-bottom: 1px solid var(--rule); text-align: right; white-space: nowrap; }
+.profit-table th { font: 10.5px var(--mono); background: var(--surface-2); }
+.profit-table th:first-child, .profit-table td:first-child { text-align: left; white-space: normal; min-width: 220px; max-width: 320px; overflow-wrap: anywhere; }
+.profit-table summary { cursor: pointer; line-height: 1.5; }
+.profit-evidence { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 6px 10px; font-size: 12px; }
+.profit-evidence dt { color: var(--ink-2); }
+.profit-evidence dd { margin: 0; }
+@media (max-width: 640px) { .profit-controls > label { flex: 1 1 135px; } .profit-actions { align-items: start; } .profit-context { align-items: start; } }
+@media (max-width: 360px) { #view-profit .kpis { grid-template-columns: minmax(0, 1fr); } }

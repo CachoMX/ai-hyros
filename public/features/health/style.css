@@ -1,4 +1,8 @@
 /* Tracking Health — feature-scoped styles */
+#view-health { min-width: 0; overflow-wrap: anywhere; }
+#view-health .fcols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#view-health .fpanel, #view-health .kpi { min-width: 0; }
+.health-row > .sub, .health-row > .pill { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .health-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
 .health-row:last-child { border-bottom: 0; }
 .health-row code { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
@@ -12,3 +16,33 @@
 .health-variants { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 0 8px 12px; border-bottom: 1px solid var(--rule); }
 .health-variants .sub { font-family: var(--mono); font-size: 11px; }
 .health-site { border-bottom: 0; }
+.health-wizard { margin: 20px 0; padding: 16px 0; border-block: 1px solid var(--border); letter-spacing: 0; }
+.health-wizard-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.health-wizard h3 { font: 400 19px var(--serif); margin: 0; }
+.health-workflow { display: grid; grid-template-columns: minmax(180px, 0.8fr) minmax(0, 2fr); gap: 24px; }
+.health-issues { display: flex; flex-direction: column; align-self: start; gap: 4px; max-height: 440px; overflow: auto; }
+.health-issue { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; text-align: left; border: 0; border-radius: 4px; padding: 10px; white-space: normal; overflow-wrap: anywhere; }
+.health-issue .pill { align-self: start; }
+.health-issue[aria-pressed="true"] { background: var(--lavbg); color: var(--brand); }
+.health-detail { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.health-detail h4 { font-size: 15px; font-weight: 500; margin: 18px 0 6px; }
+.health-steps { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--rule); padding-bottom: 10px; }
+.health-steps button { border: 0; border-radius: 4px; font-size: 12px; min-height: 36px; }
+.health-steps button[aria-pressed="true"] { background: var(--lavbg); color: var(--brand); }
+.health-evidence { padding-left: 20px; line-height: 1.65; }
+.health-checklist { display: grid; gap: 12px; margin: 16px 0; }
+.health-checklist label { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; line-height: 1.55; align-items: start; }
+.health-checklist input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--brand); }
+.health-result { min-height: 24px; margin-top: 12px; line-height: 1.5; }
+.health-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-top: 12px; }
+.health-wizard button { letter-spacing: 0; max-width: 100%; white-space: normal; }
+.health-variants .sub { overflow-wrap: anywhere; min-width: 0; }
+@media (max-width: 860px) {
+  #view-health .fcols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .health-workflow { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .health-issues { max-height: 210px; }
+  .health-steps button { flex: 1 1 95px; padding: 8px; }
+  .health-status { flex-wrap: wrap; }
+}

@@ -1,18 +1,21 @@
 /** Ad LTV — renders ctx.block into ctx.root. */
+import { renderLive } from './live-view.js';
 const KIND_LABEL = { email: 'email', organic: 'organic', ads: 'paid' };
 
 export function render(ctx) {
   const { fmt, esc, kpis } = ctx;
   const d = ctx.block;
-  // Demo-only feature: a block without rows ({ error }, { skipped }, {}) renders a status, never throws.
+  if (d?.mode === 'observed') { renderLive(ctx); return; }
+  // Preserve the original demo and older snapshot shape.
   if (!d || typeof d !== 'object' || !Array.isArray(d.rows) || !d.rows.length || !Array.isArray(d.callLeaders)) {
     const why = d?.error ? `Error: ${esc(d.error)}`
       : d?.skipped ? `Skipped this refresh (${esc(d.skipped)}).`
         : 'No Ad LTV data in this snapshot.';
-    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${why}</div></div>`;
+    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${d?.stale ? 'Showing the previous result. ' : ''}${why}</div></div>`;
     return;
   }
-  const status = d.stale && d.skipped ? `<br><b>Showing the previous result</b> — skipped this refresh: ${esc(d.skipped)}.` : '';
+  const when = d.checkedAt || d.window?.end;
+  const status = d.stale ? `<br><b>Showing the previous result</b>${when ? ` (${esc(fmt.datetime(when))})` : ''}${d.skipped ? ` - skipped this refresh: ${esc(d.skipped)}` : ''}.` : '';
 
   const topAd = [...d.rows].sort((a, b) => b.ltv60 - a.ltv60)[0];
   const avgMult = d.rows.reduce((s, r) => s + (r.mult || 0), 0) / d.rows.length;

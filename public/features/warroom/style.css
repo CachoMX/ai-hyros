@@ -1,0 +1,31 @@
+[data-feature="warroom"] { padding:24px; }
+.wr-head,.wr-toolbar,.wr-tools { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }
+.wr-head h2 { font-size:22px;margin:0; }
+.wr-head p { margin:6px 0; }
+.wr-tools label,.wr-toolbar label { display:flex;align-items:center;gap:8px;font-size:12px; }
+.wr-tools select,.wr-toolbar select,.wr-controls select { padding:8px;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--surface,#fff);color:inherit; }
+.wr-metrics { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:24px 0; }
+.wr-toolbar { border-bottom:1px solid var(--border,#ddd);padding:12px 0; }
+.wr-toolbar h3,.wr-detail h3 { font-size:14px;margin:0; }
+.wr-finding { display:grid;grid-template-columns:70px minmax(0,1fr) 124px;gap:20px;padding:22px 0;border-bottom:1px solid var(--border,#ddd); }
+.wr-priority { font-size:11px;text-transform:uppercase;font-weight:600;color:#8d600b;padding-top:3px; }
+.wr-priority.critical,.wr-priority.high { color:#ad3333; }
+.wr-detail p { font-size:13px;line-height:1.6;margin:6px 0;overflow-wrap:anywhere; }
+.wr-detail .wr-action { color:var(--text,#202020); }
+.wr-detail details { font-size:12px;margin-top:12px; }
+.wr-detail summary { cursor:pointer; }
+.wr-detail dl { display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px;margin:12px 0; }
+.wr-detail dd { margin:0;overflow-wrap:anywhere; }
+.wr-controls { display:flex;flex-direction:column;gap:8px;align-self:start; }
+.wr-warning { padding:12px;border-left:3px solid #bd7d13;background:#fff6df;font-size:13px; }
+.wr-empty { padding:32px 0; }
+.wr-foot { font-size:12px;margin-top:20px; }
+.wr-journal { border-top:1px solid var(--border,#ddd);padding-top:18px;font-size:13px; }
+.wr-journal summary { cursor:pointer;font-weight:600; }
+.wr-journal form { display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:16px;max-width:960px; }
+.wr-journal label { display:flex;flex-direction:column;gap:6px;min-width:0; }
+.wr-journal input,.wr-journal select,.wr-journal textarea { width:100%;min-width:0;padding:9px;border:1px solid var(--border,#ddd);background:var(--surface,#fff);color:inherit;border-radius:4px;font:inherit; }
+.wr-wide { grid-column:1/-1; }
+@media(max-width:640px) { .wr-journal form { grid-template-columns:minmax(0,1fr); } }
+.sr-only { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0); }
+@media(max-width:640px) { [data-feature="warroom"]{padding:16px}.wr-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.wr-finding{grid-template-columns:minmax(0,1fr);gap:8px}.wr-controls{flex-direction:row}.wr-head h2{font-size:20px} }

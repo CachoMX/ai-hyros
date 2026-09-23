@@ -20,10 +20,14 @@ public/features/<id>/
 
 Registry: `public/features/registry.js`
 ```js
-export const FEATURES = ['funnel', 'adltv', 'scale', 'health'];   // tab order
+export const FEATURES = ['attribution', 'funnel', 'adltv', 'profit', 'creative', 'health', 'scale', 'portfolio', 'warroom', 'brief', 'copilot'];
 ```
 Remove an id to unplug a feature without deleting it. Folders whose name
 starts with `_` are ignored (`_template`).
+
+Registry order is dependency/build order. The shell pins War Room first in
+navigation. Derived features can read blocks built earlier in the registry;
+they must tolerate an upstream missing, skipped, failed or stale block.
 
 ## feature.json
 
@@ -119,6 +123,8 @@ never throw. Read every field with a fallback (`b.rows || []`).
 | `openJourney(email)` | open the lead journey drawer for an email |
 | `api(path, opts)` | password- and account-scoped fetch to this app's own **core** routes (`/api/drill`, `/api/snapshot`…) — never HYROS. Features cannot add routes (`api/` is off-limits), so this is for reusing what the core already serves; a feature's own live data arrives only through `server.js` during refresh |
 | `selectView(id)` | switch tabs |
+| `setRange(range)` | select an available report period and redraw the active view |
+| `reload()` | reload the current account and redraw header, Report, CRM and active feature; ignores account changes |
 | `manifest` | this feature's manifest |
 
 Shared markup kit (already styled): `.note`, `.kpis`/`.kpi`, `.fpanel` +
@@ -142,10 +148,12 @@ the browser and in Node (`make-seed`, `feature-check`), so no DOM and no
 
 Runs inside `/api/refresh` after the core snapshot (account, ad accounts,
 ranges, CRM) is built, for every feature with `"server": true`, in registry
-order, within the function's remaining time budget. Each step gets a fair
-share of what is left (remaining time / steps still to run; the last one
-gets the rest) as its `deadline`, so an expensive step cannot starve the
-ones after it. Returns the block.
+order, within the function's remaining time budget. Steps declaring MCP
+tools share the network budget, with the existing 60-second floor capped
+by the time remaining. Local-only modules do not dilute that share. A slow
+remote step can still leave a later step skipped; views must show that state.
+The server context includes core data plus earlier feature blocks, while
+`previous` remains only this feature's previous block. Returns the block.
 
 `ctx`: `callTool(name, args, { timeoutMs })`, `callToolPaged(name, args,
 { maxPages, pageSize })`, `snapshot` (core, including `warnings[]` —

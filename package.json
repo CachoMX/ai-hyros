@@ -7,10 +7,18 @@
   "description": "HYROS Performance Report + CRM clone, driven entirely by the HYROS MCP",
   "scripts": {
     "dev": "vercel dev",
-    "check": "node scripts/selftest.mjs && node scripts/store-test.mjs && node scripts/feature-check.mjs && node scripts/feature-unit-test.mjs && node scripts/pipeline-test.mjs",
+    "check": "node scripts/check.mjs",
+    "preview:live": "node --env-file=.env.development.local scripts/live-preview.mjs",
+    "test:browser": "node scripts/browser-test.mjs && node scripts/browser-race-test.mjs",
+    "test:browser:live": "node scripts/browser-live-test.mjs",
     "test": "npm run check",
     "features": "node scripts/feature-check.mjs",
     "seed": "node scripts/make-seed.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
 }

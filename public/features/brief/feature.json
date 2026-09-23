@@ -1,0 +1,14 @@
+{
+  "id": "brief",
+  "name": "Daily Brief",
+  "tab": "Daily Brief",
+  "version": "1.0.0",
+  "description": "Snapshot revisions, coverage findings, and an account alert inbox.",
+  "mode": "both",
+  "demo": true,
+  "server": true,
+  "style": true,
+  "needs": [],
+  "tools": [],
+  "author": "AI HYROS"
+}

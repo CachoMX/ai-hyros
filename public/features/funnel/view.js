@@ -1,16 +1,20 @@
 /** Funnel & Journey — renders the feature's block (ctx.block) into ctx.root. */
+import { renderLive } from './live-view.js';
+
 export function render(ctx) {
   const { fmt, esc, kpis } = ctx;
   const f = ctx.block;
-  // Demo-only feature: a block without stages ({ error }, { skipped }, {}) renders a status, never throws.
+  if (f?.mode === 'paths') { renderLive(ctx); return; }
+  // Preserve the original demo and older snapshot shape.
   if (!f || typeof f !== 'object' || !Array.isArray(f.stages) || !f.stages.length) {
     const why = f?.error ? `Error: ${esc(f.error)}`
       : f?.skipped ? `${f.stale ? 'Showing nothing from the previous refresh — ' : ''}skipped this refresh (${esc(f.skipped)}).`
         : 'No funnel data in this snapshot.';
-    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${why}</div></div>`;
+    ctx.root.innerHTML = `<div class="fpanel"><div class="empty">${f?.stale ? 'Showing the previous result. ' : ''}${why}</div></div>`;
     return;
   }
-  const status = f.stale && f.skipped ? `<br><b>Showing the previous result</b> — skipped this refresh: ${esc(f.skipped)}.` : '';
+  const when = f.checkedAt || f.window?.end;
+  const status = f.stale ? `<br><b>Showing the previous result</b>${when ? ` (${esc(fmt.datetime(when))})` : ''}${f.skipped ? ` - skipped this refresh: ${esc(f.skipped)}` : ''}.` : '';
   const top = f.stages[0].value || 1;
   const customers = f.stages[f.stages.length - 1].value;
 

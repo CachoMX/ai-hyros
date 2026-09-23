@@ -49,7 +49,7 @@ const failed = (reason, ms) => (ms === undefined ? { status: 'failed', reason } 
 
 // --- timeouts -----------------------------------------------------------------
 /** The per-call timeout for the cheap checks: the runner's default, else the 15 s contract. */
-const defaultTimeout = (ctx) => Math.min(ctx.timeouts?.default ?? DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+const defaultTimeout = (ctx) => Math.max(1000, Math.min(ctx.timeouts?.default ?? DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, ctx.timeLeft() - 2000));
 
 /**
  * The script check's timeout. A runner that exposes `ctx.timeouts` has
@@ -190,7 +190,7 @@ async function checkScript(ctx, domains, domainsCheck) {
   for (let i = 0; i < sites.length; i += MAX_URLS_PER_CALL) {
     if (ctx.timeLeft() < SLOW_MIN_LEFT_MS) { stop = 'time budget'; break; }
     const batch = sites.slice(i, i + MAX_URLS_PER_CALL);
-    const timeoutMs = slowTimeout(ctx);
+    const timeoutMs = i === 0 ? slowTimeout(ctx) : defaultTimeout(ctx);
     ctx.log(`health script ${i / MAX_URLS_PER_CALL + 1}/${Math.ceil(sites.length / MAX_URLS_PER_CALL)}`);
     // Every MCP tool takes its arguments under `request` (flat args answer "Missing required property: request").
     const r = await timed(ctx.callTool, 'hyros_assert_script_presence_on_domain', { request: { domains: batch.map((x) => x.url) } }, timeoutMs);

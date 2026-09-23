@@ -1,0 +1,62 @@
+.attribution { min-width: 0; color: var(--ink); }
+.attribution, .attribution * { box-sizing: border-box; letter-spacing: 0; }
+.attribution-heading, .attribution-section-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.attribution h2 { font: 24px var(--serif); margin: 0; }
+.attribution h3 { font: 18px var(--serif); margin: 0 0 10px; }
+.attribution-heading { margin: 0 0 14px; }
+.attribution-context { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+.attribution-toolbar, .attribution-weights { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; padding: 12px 0 16px; }
+.attribution label { display: flex; flex-direction: column; gap: 5px; color: var(--ink-2); font: 11px var(--mono); min-width: 0; }
+.attribution select { width: 150px; max-width: 100%; min-height: 36px; }
+.attribution input[type=number] { width: 120px; max-width: 100%; min-height: 36px; }
+.attribution .attribution-check { flex-direction: row; align-items: center; align-self: center; font-family: var(--sans, sans-serif); font-size: 12px; }
+.attribution-check input { width: 16px; height: 16px; accent-color: var(--brand); }
+.attribution-segment { display: flex; border: 1px solid var(--border-2); border-radius: 6px; overflow: hidden; min-height: 36px; }
+.attribution-segment button { border: 0; border-radius: 0; min-width: 60px; }
+.attribution-segment button[aria-pressed=true] { background: var(--lavbg); color: var(--brand); }
+.attribution-export { min-height: 36px; margin-left: auto; white-space: nowrap; }
+.attribution-export span { font-size: 18px; margin-right: 5px; }
+.attribution-weights { border-top: 1px solid var(--rule); }
+.attribution-section { padding: 16px 0; border-top: 1px solid var(--border); min-width: 0; }
+.attribution-scroll { overflow: auto; max-width: 100%; overscroll-behavior-x: contain; }
+.attribution table { border-collapse: collapse; width: 100%; min-width: 720px; table-layout: auto; }
+.attribution th { cursor: default; }
+.attribution td, .attribution th { padding: 10px 12px; }
+.attribution th:first-child, .attribution td:first-child { position: static; text-align: left; min-width: 180px; max-width: 300px; white-space: normal; overflow-wrap: anywhere; }
+.attribution th .sub, .attribution td .sub { display: block; white-space: normal; }
+.attribution details { min-width: 0; }
+.attribution summary { cursor: pointer; color: var(--ink); }
+.attribution summary:focus-visible, .attribution button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.attribution-total td { background: var(--surface-2); font-weight: 500; }
+.attribution-bars { width: 100px; display: flex; gap: 4px; flex-direction: column; min-height: 16px; }
+.attribution-bars span { display: block; height: 6px; background: var(--ink-3); border-radius: 2px; }
+.attribution-bars span + span { background: var(--brand); }
+.attribution-core { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+.attribution-core strong { font: 23px var(--serif); color: var(--ink); }
+.attribution-summary { font-size: 14px; }
+.attribution-facts { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 10px 20px; font-size: 12px; }
+.attribution-facts dt { color: var(--ink-2); }
+.attribution-facts dd { margin: 0; overflow-wrap: anywhere; }
+.attribution .attribution-evidence { min-width: 640px; }
+.attribution-evidence summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(140px, 1fr) minmax(110px, 1fr) minmax(70px, .6fr); gap: 12px; }
+.attribution-evidence summary > span { overflow-wrap: anywhere; }
+.attribution-evidence summary > span:first-child::before { content: '+ '; color: var(--brand); }
+.attribution-evidence details[open] > summary > span:first-child::before { content: '- '; }
+.attribution-evidence-meta { margin: 12px 0; font: 11px var(--mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.attribution-pagination { display: flex; align-items: center; gap: 10px; font: 12px var(--mono); }
+.attribution-pagination button { width: 34px; height: 34px; padding: 0; }
+.attribution-pagination span { min-width: 48px; text-align: center; }
+.attribution-empty { padding: 18px 0; font-size: 12px; color: var(--ink-2); }
+.attribution .note { overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .attribution-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  .attribution-toolbar select { width: 100%; }
+  .attribution-toolbar .attribution-check { font-size: 11px; }
+  .attribution-export { margin-left: 0; justify-self: start; }
+  .attribution-facts { grid-template-columns: 1fr; gap: 5px; }
+  .attribution-facts dd { margin-bottom: 10px; }
+  .attribution .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attribution .kpi { min-width: 0; }
+  .attribution .kpi-value { overflow-wrap: anywhere; font-size: 22px; }
+  .attribution .kpi-sub { overflow-wrap: anywhere; }
+}

@@ -2,12 +2,13 @@
   "id": "funnel",
   "name": "Funnel & Journey",
   "tab": "Funnel & Journey",
-  "version": "1.1.0",
-  "description": "Stage-by-stage funnel (clicks → carts → leads → customers) with the net order value after refunds spread over each stage — AOV and the value of an add to cart — plus where customers enter and convert by campaign, and the most common tracked paths.",
-  "mode": "demo",
+  "version": "2.0.0",
+  "description": "Observed conversion paths, opening and closing sources, assists, full-chain evidence and separate CRM activity counts.",
+  "mode": "both",
   "demo": true,
-  "server": false,
+  "server": true,
   "style": true,
-  "needs": ["ranges.30d"],
+  "needs": [],
+  "tools": [],
   "author": "HYROS"
 }

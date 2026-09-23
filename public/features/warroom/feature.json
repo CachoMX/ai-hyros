@@ -1,0 +1,6 @@
+{
+  "id": "warroom", "name": "Decision War Room", "tab": "War Room", "version": "1.0.0",
+  "description": "Prioritized findings with evidence and a local decision journal.",
+  "mode": "both", "demo": true, "server": true, "style": true,
+  "needs": [], "tools": [], "author": "Mosaide"
+}

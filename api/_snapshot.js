@@ -54,10 +54,10 @@ export function buildRanges(now, tz) {
  * re-derive. Null-stripping keeps the stored snapshot far smaller than the
  * wire payload even with the full catalog requested.
  */
-const CORE_ZERO = ['cost', 'revenue', 'totalRevenue', 'sales', 'leads',
+const CORE_ZERO = ['cost', 'revenue', 'sales', 'leads',
   'calls', 'clicks', 'impressions', 'reported'];
 
-function normalizeRow(raw) {
+export function normalizeRow(raw) {
   const row = {
     id: String(raw.id ?? ''),
     name: raw.name || null,
@@ -70,7 +70,8 @@ function normalizeRow(raw) {
     const v = entry.k === 'reported' ? raw.reportedResult : raw[entry.k];
     if (v !== null && v !== undefined) row[entry.k] = v;
   }
-  for (const k of CORE_ZERO) row[k] = row[k] ?? 0;
+  // Revenue absent from the response is unknown, not a zero-sale observation.
+  for (const k of CORE_ZERO) if (k !== 'revenue') row[k] = row[k] ?? 0;
   return derive(row);
 }
 
@@ -613,7 +614,7 @@ export async function buildSnapshot({
 
   // Feature server steps (Scale Advisor, Tracking Health, anything a user
   // adds under public/features/) — best-effort inside the remaining budget.
-  const core = { schema: 2, attributionModel: model, settings, adAccounts: accounts.map((a) => ({ id: String(a.id), name: a.name, type: a.type })), ranges: out, crm, warnings, account: { email: user?.userProfile?.email || null, timezone: tz } };
+  const core = { schema: 2, generatedAt: now.toISOString(), attributionModel: model, settings, adAccounts: accounts.map((a) => ({ id: String(a.id), name: a.name, type: a.type })), ranges: out, crm, warnings, account: { email: user?.userProfile?.email || null, timezone: tz, currency: user?.trueTrackingData?.OUTBOUND_CURRENCY || 'USD' } };
   const featureBlocks = await runFeatureSteps({ snapshot: core, previous, deadline, onProgress });
 
   return {

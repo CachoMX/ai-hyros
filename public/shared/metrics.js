@@ -11,7 +11,14 @@
  *   meta: cost 4,129.58, revenue 0       ->  profit -4,129.58, ROI -100.00%
  */
 
-const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+const num = (v) => (finite(v) ? v : 0);
+
+/** A known total wins; legacy one-time revenue may omit rebills. Neither known means unknown. */
+export function reportRevenue(row) {
+  if (finite(row?.totalRevenue)) return row.totalRevenue;
+  return finite(row?.revenue) ? row.revenue + num(row.recurringRevenue) : null;
+}
 
 /**
  * THE CATALOG — every metric the HYROS attribution report can return, mapped
@@ -184,7 +191,7 @@ const RATIOS = {
   costPerNewSubscriptions: (r) => ratio(r.cost, r.newSubscriptions),
   costPerNewTrials:        (r) => ratio(r.cost, r.newTrials),
   costPerAtc:              (r) => ratio(r.cost, r.atcEvents),
-  averageOrderValue:       (r) => ratio(r.revenue, r.sales),
+  averageOrderValue:       (r) => finite(r.revenue) ? ratio(r.revenue, r.sales) : null,
   cvr:                     (r) => pct100(r.sales, r.clicks),
   refundedSalesPercentage: (r) => pct100(r.refundCount, r.sales),
   refundedRevenuePercentage:(r) => pct100(r.refund, r.revenue),
@@ -199,15 +206,16 @@ const RATIOS = {
  */
 export function derive(row) {
   const cost = num(row.cost);
-  const revenue = num(row.revenue);
+  const revenue = reportRevenue(row);
   const impressions = num(row.impressions);
 
   const out = {
     ...row,
-    profit: revenue - cost,
-    roas: cost === 0 ? null : revenue / cost,
-    roi: cost === 0 ? null : ((revenue - cost) / cost) * 100,
-    reportedVsRevenue: revenue - num(row.reported),
+    totalRevenue: revenue,
+    profit: revenue === null ? null : revenue - cost,
+    roas: revenue === null || cost === 0 ? null : revenue / cost,
+    roi: revenue === null || cost === 0 ? null : ((revenue - cost) / cost) * 100,
+    reportedVsRevenue: finite(row.revenue) ? row.revenue - num(row.reported) : null,
     ctr: impressions === 0 ? null : (num(row.clicks) / impressions) * 100,
     cpm: impressions === 0 ? null : (cost / impressions) * 1000,
     cpl: ratio(cost, row.leads),
@@ -224,12 +232,17 @@ export function derive(row) {
   return out;
 }
 
-/** Sum a set of rows into one row, then re-derive. */
+/** Sum and re-derive. Revenue stays unknown if any child is unknown; empty sums are zero. */
 export function aggregate(rows, seed = {}) {
   const base = { ...seed };
   for (const key of ADDITIVE) base[key] = 0;
   for (const row of rows) {
-    for (const key of ADDITIVE) base[key] += num(row[key]);
+    for (const key of ADDITIVE) {
+      if (key === 'totalRevenue' || key === 'revenue') {
+        const value = key === 'totalRevenue' ? reportRevenue(row) : finite(row.revenue) ? row.revenue : null;
+        base[key] = base[key] === null || value === null ? null : base[key] + value;
+      } else base[key] += num(row[key]);
+    }
   }
   return derive(base);
 }

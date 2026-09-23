@@ -119,6 +119,23 @@ styles and a portable `SPEC.md`. The core app discovers them from
 
 ## What it does
 
+**Mosaide decision modules** - War Room with evidence and a local decision
+journal; Attribution Lab with five transparent models; live Funnel & Journey
+and observed Ad LTV; Profit with explicit margin/refund assumptions; Creative
+Intelligence; multi-account Portfolio; Daily Brief with a bounded snapshot
+history; and an Evidence Copilot with a deterministic fallback.
+
+Attribution samples, missing costs, immature cohorts and previous checks stay
+visible. These modules do not execute advertising changes or claim causal lift.
+Settings and decision/read states are browser-local and account-scoped.
+Revenue-based ROAS includes rebills; missing revenue stays unknown.
+
+See [local preview and tests](docs/LOCAL-PREVIEW.md),
+[contest demo and MCP prompts](docs/CONTEST-DEMO.md),
+[optional copilot provider](docs/COPILOT.md), and
+[signed webhooks](docs/WEBHOOKS.md). Provider calls and webhook subscriptions
+are not enabled merely by installing this code.
+
 **Performance Report** — five levels (Traffic source · Account · Campaign ·
 Ad Set · Ad), 103 selectable metrics, date-range chips, client-side
 sort/filter/search, sticky totals, CSV export, click-through from any number
@@ -130,8 +147,8 @@ subscriptions, stage and attribution filters, search, CSV export.
 
 **Scale Advisor** — marginal CAC curves per account and top ad set
 (`hyros_get_marginal_cac_curve`), with the saturation point called out.
-The tool currently answers HTTP 404 on the live MCP (raised with HYROS);
-the tab says so instead of showing an empty chart.
+Availability and coverage vary by account; partial results and failures are
+shown explicitly. Ceiling comparisons describe observed history, not forecasts.
 
 **Tracking Health** — domains, script presence per URL, Google tracking
 parameters per integration.
@@ -142,7 +159,7 @@ call) and the daily refresh rotates through the stalest ones.
 
 **Demo account** — always in the account menu. Synthetic, profitable-looking
 data generated in the browser with the same math as the live pipeline; also
-unlocks the Funnel & Journey and Ad LTV preview tabs.
+exercises every feature without mixing synthetic records into live snapshots.
 
 ## How it works
 
