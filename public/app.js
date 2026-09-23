@@ -938,7 +938,7 @@ async function firstBuild() {
       await loadAccounts();
       return;
     }
-    if (!await load(account)) return;
+    if (body.persisted && !await load(account)) return;
     await loadAccounts();
     pickValidRange();
     renderChrome(); renderRangeChips(); renderLevelChips(); renderReport(); renderCrm();
@@ -1250,7 +1250,7 @@ $('refreshBtn').addEventListener('click', async () => {
     if (state.account !== account || state.demo) return;
     recordRefresh(body, 'refresh');
     if (body.ok) {
-      if (!await load(account)) return;
+      if (body.persisted && !await load(account)) return;
       renderChrome(); renderRangeChips(); renderReport(); renderCrm(); renderActiveFeature();
       note(`Refreshed in ${(body.ms / 1000).toFixed(1)}s.${persistNote(body)}`, !body.persisted);
     } else {
@@ -1260,18 +1260,20 @@ $('refreshBtn').addEventListener('click', async () => {
     recordRefresh({ ok: false, code: err.code, message: err.message }, 'refresh');
     note(`Refresh failed: ${esc(failureCopy(err))}`, true);
   } finally {
-    btn.disabled = false;
+    btn.disabled = state.demo;
     btn.textContent = 'Refresh';
   }
 });
 
 /** Keep the last refresh outcome (for Copy diagnostics): steps, timing, code — never the snapshot itself. */
 function recordRefresh(body, kind) {
+  const persistenceError = body?.ok ? persistenceFailure(body) : null;
   state.lastRefresh = {
     kind, at: new Date().toISOString(), account: state.account || null,
     ok: Boolean(body?.ok), ms: body?.ms ?? null, persisted: body?.persisted ?? null,
-    code: body?.ok ? null : (body?.code || body?.error || null),
-    message: body?.ok ? null : (body?.message || null),
+    code: persistenceError?.code ?? (body?.ok ? null : (body?.code || body?.error || null)),
+    message: persistenceError?.message ?? (body?.ok ? null : (body?.message || null)),
+    persistenceWarning: body?.persistenceWarning ? persistenceIssue(body.persistenceWarning) : null,
     steps: Array.isArray(body?.steps) ? body.steps.slice(-40) : null,
     counts: body?.counts || null,
   };
@@ -1281,19 +1283,40 @@ function note(msg, isErr) {
   $('reportNote').innerHTML = `<div class="note${isErr ? ' err' : ''}">${msg}</div>`;
 }
 
-/**
- * Why a refresh answered persisted:false. "KV is not configured" only when
- * the store really is absent (the response's own flag, else what /api/data
- * and /api/setup said); with a store present the write itself failed —
- * almost always a snapshot over the store's value limit.
- */
-function persistNote(body) {
-  if (body?.persisted) return '';
+const PERSISTENCE_COPY = {
+  kv_size: 'The snapshot exceeds the database size limit for a single value.',
+  kv_limit: 'The database has reached a usage or storage limit. Check its limits and status in Upstash.',
+  kv_auth: 'Database authentication failed. Check the database credentials.',
+  kv_permission: 'The database credentials do not allow saving snapshots.',
+  kv_timeout: 'The database save timed out. Try again later.',
+  kv_unavailable: 'Unable to save the snapshot. Try again later.',
+  kv_config: 'KV is not configured.',
+  kv_response: 'The database returned an invalid response while saving the snapshot.',
+};
+
+/** Keep only the storage contract's safe fields, never provider response details. */
+function persistenceIssue(issue) {
+  const code = Object.hasOwn(PERSISTENCE_COPY, issue?.code) ? issue.code : 'kv_unavailable';
+  return { code, message: typeof issue?.message === 'string' && issue.message.trim() ? issue.message : PERSISTENCE_COPY[code] };
+}
+
+function persistenceFailure(body) {
+  if (body?.persisted !== false) return null;
+  if (body.persistenceError) return persistenceIssue(body.persistenceError);
   const storage = body?.storeConfigured ?? body?.storage
     ?? (body?.storeVia ? true : undefined)
     ?? state.capabilities?.storeConfigured ?? state.setup?.storage;
-  if (storage === false || /KV is not configured/i.test(String(body?.warning || ''))) return ' Not persisted — KV is not configured.';
-  return ' Snapshot too large to store — see the account menu.';
+  const code = storage === false || /KV is not configured/i.test(String(body?.warning || '')) ? 'kv_config' : 'kv_unavailable';
+  return persistenceIssue({ code });
+}
+
+function persistNote(body) {
+  const error = persistenceFailure(body);
+  if (error) return ` Snapshot not saved: ${esc(error.message)}`;
+  if (body?.persisted && body.persistenceWarning) {
+    return ` Snapshot saved, but its history copy could not be saved: ${esc(persistenceIssue(body.persistenceWarning).message)}`;
+  }
+  return '';
 }
 
 /* ------------------------------------------------------------------ *

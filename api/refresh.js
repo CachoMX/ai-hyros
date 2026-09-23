@@ -10,7 +10,7 @@
  */
 import { checkAccess, isCron, deny } from './_auth.js';
 import { buildSnapshot } from './_snapshot.js';
-import { writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw } from './_store.js';
+import { writeSnapshot, readSnapshot, readPrefs, storeConfigured, kvRaw, snapshotPersistenceError } from './_store.js';
 import { McpNotConfigured } from './_mcp.js';
 import { accountFromReq, asAccount, listAccounts, markKeyStatus, noteRefresh, syncClients } from './_accounts.js';
 import { logEvent } from './_log.js';
@@ -109,16 +109,32 @@ export async function refreshAccount(accountId, steps, budgetMs, overrides = {})
     }
     throw err;
   }
-  const persisted = storeConfigured() ? await writeSnapshot(snapshot, accountId) : false;
+  let persistence = { persisted: false };
+  if (storeConfigured()) {
+    try {
+      const result = await writeSnapshot(snapshot, accountId, { details: true });
+      persistence = typeof result === 'boolean' ? { persisted: result } : result;
+      if (!persistence?.persisted && !persistence?.persistenceError) {
+        persistence = { persisted: false, persistenceError: snapshotPersistenceError() };
+      }
+    } catch (error) {
+      persistence = { persisted: false, persistenceError: snapshotPersistenceError(error) };
+    }
+  }
+  const { persisted, persistenceError, persistenceWarning } = persistence;
   if (marker && persisted === true && snapshotFreshForWebhook(snapshot, buildStarted, now())) {
     try { await deps.clearWebhookDirty(accountId, marker); }
     catch { webhookWarning(deps, 'clear', accountId); }
   } else if (marker) {
     logEvent('refresh.webhook_retained', { accountId, reason: persisted === true ? 'incomplete_snapshot' : 'snapshot_not_persisted' });
   }
-  if (storeConfigured()) { await markKeyStatus(accountId, 'ok'); await noteRefresh(accountId, true); }
-  logEvent('refresh.ok', { accountId, ms: now() - started, warnings: snapshot.warnings?.length || 0, persisted });
-  return { snapshot, persisted };
+  if (storeConfigured()) {
+    await markKeyStatus(accountId, 'ok');
+    await noteRefresh(accountId, persisted, persistenceError?.message || persistenceWarning?.message);
+  }
+  logEvent(persisted ? 'refresh.ok' : 'refresh.not_persisted', { accountId, ms: now() - started,
+    warnings: snapshot.warnings?.length || 0, persisted, code: persistenceError?.code || persistenceWarning?.code });
+  return { snapshot, ...persistence };
 }
 
 /**
@@ -213,7 +229,11 @@ async function handleRefresh(req, res, deps) {
       if (left < CRON_MIN_ACCOUNT_MS) { done.push({ id: a.id, skipped: 'time budget' }); continue; }
       try {
         const result = await refreshAccount(a.id, steps, cronAccountBudgetMs(left), refreshDeps);
-        done.push(result.skipped ? { id: a.id, skipped: result.skipped } : { id: a.id, ok: true, persisted: result.persisted });
+        done.push(result.skipped ? { id: a.id, skipped: result.skipped } : {
+          id: a.id, ok: result.persisted, persisted: result.persisted,
+          ...(result.persistenceError ? { persistenceError: result.persistenceError } : {}),
+          ...(result.persistenceWarning ? { persistenceWarning: result.persistenceWarning } : {}),
+        });
       } catch (err) { done.push({ id: a.id, ok: false, error: err.message }); }
     }
     return res.status(200).json({ ok: true, cron: true, ...(dirtyOnly ? { dirtyOnly: true } : {}), ms: now() - started, budgetMs: CRON_BUDGET_MS, elapsedMs: now() - started, accounts: done, synced, steps });
@@ -225,12 +245,15 @@ async function handleRefresh(req, res, deps) {
   }
 
   try {
-    const { snapshot, persisted } = await refreshAccount(accountId, steps, REFRESH_BUDGET_MS, refreshDeps);
+    const { snapshot, persisted, persistenceError, persistenceWarning, storage } = await refreshAccount(accountId, steps, REFRESH_BUDGET_MS, refreshDeps);
 
     res.status(200).json({
       ok: true,
       account: accountId,
       persisted,
+      ...(persistenceError ? { persistenceError } : {}),
+      ...(persistenceWarning ? { persistenceWarning } : {}),
+      ...(storage ? { storage } : {}),
       storeConfigured: storeConfigured(),
       warning: storeConfigured()
         ? undefined

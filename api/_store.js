@@ -5,6 +5,7 @@
  * from a missing record so an unavailable database never starts first-run setup.
  */
 import { logEvent } from './_log.js';
+import { encodeSnapshot, decodeSnapshot, SNAPSHOT_MAX_STORED_BYTES } from './_snapshot-codec.js';
 
 const KEY = 'aihyros:snapshot:latest';
 const HISTORY_PREFIX = 'aihyros:snapshot:';
@@ -62,6 +63,8 @@ const STORAGE_MESSAGES = {
   auth: 'Database authentication failed. Check the Redis REST URL and token in Vercel, then redeploy.',
   permission: 'Database write permission was denied. Use the standard read/write REST token, not a read-only token, then redeploy.',
   limit: 'The database has reached a usage or storage limit. Check its limits and status in Upstash.',
+  size: 'The snapshot exceeds the database request limit even after compression.',
+  snapshot_corrupt: 'The saved snapshot could not be decoded safely. Check storage diagnostics before refreshing again.',
   timeout: 'The database request timed out. Retry after checking the database status.',
   unavailable: 'The database is temporarily unavailable. Retry later; do not reset this dashboard.',
   config: 'Database REST configuration is missing or invalid. Check the REST URL and token in Vercel, then redeploy.',
@@ -78,6 +81,7 @@ function storageError(kind, operation, httpStatus = null) {
 
 function storageFailure(status, message) {
   const text = String(message || '').slice(0, 1000);
+  if (status === 413 || /max(?:imum)?.*(?:request|single record|value).*size|payload too large|request (?:body )?too large/i.test(text)) return 'size';
   if (/READONLY|NOPERM|read.only|permission|not allowed/i.test(text)) return 'permission';
   if (status === 401 || /WRONGPASS|unauthorized|invalid token|authentication/i.test(text)) return 'auth';
   if (status === 429 || /quota|limit exceeded|exceeded.*limit|max.*(?:size|requests)|OOM/i.test(text)) return 'limit';
@@ -212,16 +216,46 @@ export async function writePrefs(prefs, accountId = PRIMARY_ID) {
 }
 
 export async function readSnapshot(accountId = PRIMARY_ID) {
-  return readJson(snapKey(accountId));
+  const raw = await kv(['GET', snapKey(accountId)]);
+  if (raw === null) return null;
+  try { return await decodeSnapshot(raw); }
+  catch { storageError('snapshot_corrupt', 'GET'); return null; }
 }
 
-export async function writeSnapshot(snapshot, accountId = PRIMARY_ID) {
-  const payload = JSON.stringify(snapshot);
+/** Only our fixed messages may be surfaced; never forward a provider response. */
+export function snapshotPersistenceError(error) {
+  const kind = String(error?.code || '').replace(/^kv_/, '');
+  const code = Object.hasOwn(STORAGE_MESSAGES, kind) ? `kv_${kind}` : 'kv_unavailable';
+  return { code, message: STORAGE_MESSAGES[code.slice(3)] };
+}
+
+export async function writeSnapshot(snapshot, accountId = PRIMARY_ID, { details = false } = {}) {
+  let encoded;
+  let storage;
+  const save = async (command) => {
+    // The REST command JSON adds escaping and arguments to the stored value.
+    if (Buffer.byteLength(JSON.stringify(command)) > SNAPSHOT_MAX_STORED_BYTES) throw storageError('size', 'SET');
+    if (await kv(command, { strict: true }) !== 'OK') throw storageError('response', 'SET');
+  };
   const day = (snapshot.generatedAt || new Date().toISOString()).slice(0, 10);
-  const ok = await kv(['SET', snapKey(accountId), payload]);
-  // Keep a dated copy so a bad refresh can be compared against yesterday.
-  await kv(['SET', histKey(accountId, day), payload, 'EX', String(TTL_SECONDS)]);
-  return ok !== null;
+  try {
+    encoded = await encodeSnapshot(snapshot);
+    storage = { jsonBytes: encoded.jsonBytes, storedBytes: encoded.storedBytes, encoding: encoded.encoding };
+    await save(['SET', snapKey(accountId), encoded.value]);
+  } catch (error) {
+    const persistenceError = snapshotPersistenceError(error);
+    logEvent('storage.snapshot_failed', { code: persistenceError.code, ...storage });
+    return details ? { persisted: false, persistenceError, storage } : false;
+  }
+  let persistenceWarning;
+  try {
+    await save(['SET', histKey(accountId, day), encoded.value, 'EX', String(TTL_SECONDS)]);
+  } catch (error) {
+    const reason = snapshotPersistenceError(error);
+    persistenceWarning = { code: reason.code, message: `Current snapshot saved, but its history copy could not be saved. ${reason.message}` };
+  }
+  logEvent('storage.snapshot_saved', { ...storage, historyPersisted: !persistenceWarning });
+  return details ? { persisted: true, storage, ...(persistenceWarning ? { persistenceWarning } : {}) } : true;
 }
 
 export async function deleteAccountData(accountId) {

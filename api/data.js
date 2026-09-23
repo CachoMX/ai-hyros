@@ -10,32 +10,43 @@ import { checkAccess, deny } from './_auth.js';
 import { readSnapshot, readPrefs, storeConfigured } from './_store.js';
 import { accountFromReq } from './_accounts.js';
 import { TEMPLATE_VERSION } from './_version.js';
+import { sendJsonResponse, setPrivateResponseHeaders } from './_response.js';
 
-export default async function handler(req, res) {
-  const access = await checkAccess(req);
-  if (!access.ok) return deny(res, access);
+export function createDataHandler(deps = {}) {
+  const accessCheck = deps.checkAccess || checkAccess;
+  const accountFor = deps.accountFromReq || accountFromReq;
+  const read = deps.readSnapshot || readSnapshot;
+  const prefsFor = deps.readPrefs || readPrefs;
+  const configured = deps.storeConfigured || storeConfigured;
+  return async function handler(req, res) {
+    setPrivateResponseHeaders(res);
+    const access = await accessCheck(req);
+    if (!access.ok) return deny(res, access);
 
-  const account = await accountFromReq(req);
-  let snapshot = null;
-  let origin = 'none';
-  let prefs = null;
+    const account = await accountFor(req);
+    let snapshot = null;
+    let origin = 'none';
+    let prefs = null;
+    const hasStore = configured();
 
-  if (storeConfigured() && account) {
-    [snapshot, prefs] = await Promise.all([readSnapshot(account), readPrefs(account)]);
-    if (snapshot) origin = 'kv';
-  }
+    if (hasStore && account) {
+      [snapshot, prefs] = await Promise.all([read(account), prefsFor(account)]);
+      if (snapshot) origin = 'kv';
+    }
 
-  res.setHeader('cache-control', 'no-store');
-  res.status(200).json({
-    ok: true,
-    templateVersion: TEMPLATE_VERSION,
-    origin,
-    account,
-    prefs,
-    capabilities: {
-      mcpConfigured: Boolean(account),
-      storeConfigured: storeConfigured(),
-    },
-    snapshot,
-  });
+    return sendJsonResponse(req, res, {
+      ok: true,
+      templateVersion: TEMPLATE_VERSION,
+      origin,
+      account,
+      prefs,
+      capabilities: {
+        mcpConfigured: Boolean(account),
+        storeConfigured: hasStore,
+      },
+      snapshot,
+    });
+  };
 }
+
+export default createDataHandler();

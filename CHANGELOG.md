@@ -4,6 +4,22 @@ All notable changes to the AI HYROS dashboard template are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Large live snapshots no longer fail to persist. Snapshots over 256 KB are
+  stored gzip-compressed in Upstash (lossless, existing plain JSON records
+  still load), the REST request size is checked before sending, and
+  `/api/data` streams responses over 1 MiB with gzip when the browser
+  accepts it.
+- A refresh that builds but cannot save now says exactly why (`kv_size`,
+  `kv_limit`, `kv_auth`, `kv_permission`, `kv_timeout`, `kv_unavailable`)
+  in the response, the account's last error, the Refresh note and Copy
+  diagnostics — never a raw provider message. A failed history copy is a
+  warning and does not hide a successful save.
+- The browser no longer reloads a stale snapshot after an unpersisted
+  refresh, and the Refresh button stays disabled on the Demo account.
+
 ## [0.2.1] — 2026-09-17
 
 ### Fixed

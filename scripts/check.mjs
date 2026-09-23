@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 
 const suites = ['selftest', 'store-test', 'storage-outage-test', 'feature-check', 'feature-unit-test', 'pipeline-test',
   'attribution-test', 'economics-test', 'journey-analytics-test', 'portfolio-test',
-  'diagnostics-test', 'decisions-test', 'revenue-coverage-test', 'brief-test', 'webhook-test', 'webhook-refresh-test', 'copilot-test'];
+  'diagnostics-test', 'decisions-test', 'revenue-coverage-test', 'brief-test', 'webhook-test', 'webhook-refresh-test', 'copilot-test',
+  'snapshot-storage-test', 'data-response-test'];
 const failures = [];
 for (const suite of suites) {
   const result = spawnSync(process.execPath, [`scripts/${suite}.mjs`], { stdio: 'inherit' });
