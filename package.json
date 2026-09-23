@@ -9,7 +9,7 @@
     "dev": "vercel dev",
     "check": "node scripts/check.mjs",
     "preview:live": "node --env-file=.env.development.local scripts/live-preview.mjs",
-    "test:browser": "node scripts/browser-test.mjs && node scripts/browser-race-test.mjs",
+    "test:browser": "node scripts/browser-test.mjs && node scripts/browser-race-test.mjs && node scripts/browser-startup-test.mjs",
     "test:browser:live": "node scripts/browser-live-test.mjs",
     "test": "npm run check",
     "features": "node scripts/feature-check.mjs",

@@ -15,6 +15,8 @@ try {
     await page.goto(base);
     await page.locator('#gateDemo').click();
     await page.locator('#tab-warroom').waitFor({ state:'visible' });
+    assert.equal(await page.locator('#gate').isVisible(), false, 'Sign-in must stay hidden in Demo');
+    assert.equal(await page.locator('#setup').isVisible(), false, 'Setup must not cover Demo');
     const tabs = await page.locator('.tabs .tab:visible').evaluateAll(els => els.map(el => el.dataset.view));
     for (const tab of tabs) {
       await page.locator(`.tabs [data-view="${tab}"]`).click();
@@ -46,6 +48,7 @@ try {
     await page.locator('#cp-input').fill('unknown unsupported topic');
     await page.locator('.cp-form button').click();
     assert((await page.locator('.cp-answer').last().innerText()).includes('No verified answer'));
+    assert.equal(await page.locator('#gate').isVisible(), false, 'A delayed response must not reopen sign-in');
     await context.close();
   }
   assert.deepEqual(errors,[]);

@@ -6,6 +6,8 @@ On 2026-09-23 the release candidate passed `npm test` (all 16 suites), `npm run 
 
 ## Previously Recorded Results
 
+Visual release inspection exposed a startup race missed by the initial view checks: delayed setup or unauthorized data responses could reopen sign-in after entering Demo. The browser suite now checks that sign-in/setup remain hidden and includes delayed-response regression cases in [browser-startup-test.mjs](../scripts/browser-startup-test.mjs).
+
 Recorded on 2026-09-23 in local Windows, Node 26, and Chromium through Playwright. These are prior logged results, not a fresh run against every subsequent edit or evidence of a production deployment. Re-run the commands in [Local Preview](LOCAL-PREVIEW.md#verification) for the release candidate.
 
 | Check | Recorded result | Evidence boundary |

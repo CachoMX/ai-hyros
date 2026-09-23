@@ -15,6 +15,7 @@ try {
     await page.goto(base);
     await page.locator('#tab-warroom').waitFor({state:'visible',timeout:300000});
     assert(!(await page.locator('#acctLabel').innerText()).includes('Demo'));
+    assert.equal(await page.locator('#gate').isVisible(), false, 'Sign-in must stay hidden after authentication');
     const tabs = await page.locator('.tabs .tab:visible').evaluateAll(els=>els.map(el=>el.dataset.view));
     for(const tab of tabs){
       await page.locator(`.tabs [data-view="${tab}"]`).click();

@@ -202,14 +202,17 @@ async function load(account = state.account) {
  * Gate
  * ------------------------------------------------------------------ */
 
+let entrySequence = 0;
 $('gateForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const entry = ++entrySequence;
   state.key = $('gateKey').value.trim();
   try {
-    if (!await load()) return;
+    if (!await load() || entry !== entrySequence) return;
     sessionStorage.setItem('aihyros_key', state.key);
     afterSignIn();
   } catch {
+    if (entry !== entrySequence) return;
     $('gateErr').hidden = false;
     $('gateErr').textContent = 'Incorrect password.';
   }
@@ -222,18 +225,21 @@ $('gateDemo').addEventListener('click', () => startDemoOnly());
  * sign-in gate, or straight into the dashboard.
  */
 async function boot() {
+  const entry = entrySequence;
   try {
     const res = await fetch(`${location.origin}/api/setup`);
-    state.setup = await res.json();
-  } catch { state.setup = null; }
+    const setup = await res.json();
+    if (entry !== entrySequence) return;
+    state.setup = setup;
+  } catch { if (entry !== entrySequence) return; state.setup = null; }
   const st = state.setup?.state;
   if (st === 'needs_storage') { startDemoOnly({ overlay: 'storage' }); return; }
   if (st === 'needs_setup') { showSetup('connect'); return; }
   try {
-    if (!await load()) return;
+    if (!await load() || entry !== entrySequence) return;
     afterSignIn();
   } catch {
-    $('gate').hidden = false;
+    if (entry === entrySequence) $('gate').hidden = false;
   }
 }
 
@@ -278,7 +284,11 @@ async function start() {
  * the visitor chose the demo from the gate). Nothing here calls the API.
  */
 function startDemoOnly({ overlay = null } = {}) {
+  // An explicit Demo choice supersedes pending boot and sign-in responses.
+  entrySequence += 1;
+  dataLoadSequence += 1;
   $('gate').hidden = true;
+  $('setup').hidden = true;
   $('app').hidden = false;
   state.accounts = [];
   state.accountsMeta = { canAdd: false, message: overlay === 'storage' ? 'Set up storage first (see the banner).' : 'Sign in to add accounts.' };
