@@ -81,8 +81,10 @@ Upstash for Redis → redeploy) and a *Check again* button.
 
 No environment variables are required, and none of them decide whether the
 dashboard is set up — only the database does. The HYROS MCP endpoint
-(`https://mcp.hyros.com/mcp`) is built in. A first run is a fresh start: it
-wipes whatever an earlier install left in the store.
+(`https://mcp.hyros.com/mcp`) is built in. First-run setup preserves existing
+data and creates configuration only if absent. Database read failures stop
+setup instead of masquerading as a new installation. Only the explicit,
+authenticated Factory reset operation deletes app data.
 
 ### Optional environment variables
 

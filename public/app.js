@@ -120,7 +120,10 @@ async function api(path, opts = {}) {
   }
   const headers = { ...(opts.headers || {}), ...(state.key ? { 'x-report-key': state.key } : {}) };
   const res = await fetch(url, { ...requestOpts, headers });
-  if (res.status === 401) throw new Error('unauthorized');
+  if (res.status === 401) {
+    const failure = await res.json().catch(() => ({ error: 'unauthorized' }));
+    throw Object.assign(new Error(failureCopy(failure, failure.error || 'Sign in to the dashboard.')), { code: failure.code || failure.error || 'unauthorized' });
+  }
   try {
     return { status: res.status, body: await res.json() };
   } catch {
@@ -135,6 +138,9 @@ async function api(path, opts = {}) {
 
 const KEY_COPY = 'HYROS rejected that key — copy it again from HYROS → Settings → API.';
 const FAILURE_COPY = {
+  unauthorized: 'Your dashboard session is no longer authorized. Reload and sign in with the dashboard password, not an API key.',
+  setup_required: 'Dashboard setup is incomplete. Reload to check storage before continuing.',
+  storage_unavailable: 'Dashboard storage is unavailable. Retry later; do not reset the dashboard.',
   auth: KEY_COPY,
   bad_key: KEY_COPY,
   key_invalid: KEY_COPY,
@@ -186,7 +192,8 @@ async function load(account = state.account) {
   try { ({ body } = await api('/api/data', { account })); }
   catch (error) { if (!current()) return false; throw error; }
   if (!current()) return false;
-  if (body.ok === false || (account && body.account !== account)) throw new Error('Account snapshot unavailable.');
+  if (body.ok === false) throw Object.assign(new Error(failureCopy(body)), { code: body.code || body.error });
+  if (account && body.account !== account) throw new Error('Account snapshot unavailable.');
   state.origin = body.origin;
   state.templateVersion = body.templateVersion || state.templateVersion;
   state.capabilities = body.capabilities || {};
@@ -211,10 +218,10 @@ $('gateForm').addEventListener('submit', async (e) => {
     if (!await load() || entry !== entrySequence) return;
     sessionStorage.setItem('aihyros_key', state.key);
     afterSignIn();
-  } catch {
+  } catch (err) {
     if (entry !== entrySequence) return;
     $('gateErr').hidden = false;
-    $('gateErr').textContent = 'Incorrect password.';
+    $('gateErr').textContent = err.code === 'unauthorized' ? 'Incorrect dashboard password.' : failureCopy(err);
   }
 });
 $('gateDemo').addEventListener('click', () => startDemoOnly());
@@ -232,6 +239,12 @@ async function boot() {
     if (entry !== entrySequence) return;
     state.setup = setup;
   } catch { if (entry !== entrySequence) return; state.setup = null; }
+  if (state.setup?.ok === false) {
+    $('gate').hidden = false;
+    $('gateErr').hidden = false;
+    $('gateErr').textContent = failureCopy(state.setup);
+    return;
+  }
   const st = state.setup?.state;
   if (st === 'needs_storage') { startDemoOnly({ overlay: 'storage' }); return; }
   if (st === 'needs_setup') { showSetup('connect'); return; }
@@ -477,7 +490,7 @@ function renderSecurity() {
   const st = state.setup || {};
   const facts = [
     ['Template version', templateVersion() || '—'],
-    ['Storage', st.storage ? `connected (${st.storeVia})` : 'not set up'],
+    ['Storage', st.storage ? `configured (${st.storeVia || 'REST'}); write access not verified` : 'not set up'],
     ['Password', st.passwordSource === 'kv' ? `set on this dashboard${st.masterPassword ? ' (+ REPORT_PASSWORD master password in Vercel)' : ''}` : 'none'],
     ['Key encryption secret', st.keySecret === 'env' ? 'ACCOUNT_KEY_SECRET in Vercel' : st.keySecret === 'kv' ? 'generated, stored in the database' : 'none'],
     ['Daily refresh', st.cronSecret === 'env' ? 'signed (CRON_SECRET in Vercel)' : 'unsigned — once per hour at most; set CRON_SECRET to sign it'],

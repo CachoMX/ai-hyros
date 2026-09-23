@@ -28,7 +28,9 @@ const TTL_MS = 15000;
 export async function getConfig({ fresh = false } = {}) {
   if (!storeConfigured()) { cache = { cfg: null, at: Date.now() }; return null; }
   if (!fresh && cache.cfg !== undefined && Date.now() - cache.at < TTL_MS) return cache.cfg;
-  const cfg = await readConfig();
+  let cfg;
+  try { cfg = await readConfig(); }
+  catch (err) { cache = { cfg: undefined, at: 0 }; throw err; }
   cache = { cfg, at: Date.now() };
   return cfg;
 }
@@ -96,20 +98,20 @@ export async function setupState() {
 }
 
 /**
- * First-run password. Refused once one exists. A first run is a FRESH START:
- * every app key already in the store (an earlier install's snapshots,
- * accounts, prefs) is wiped before the new config is written.
+ * First-run password. Never delete data here. SET NX prevents simultaneous
+ * setup requests from replacing the password/encryption secret that won.
  */
 export async function setPassword(password) {
   if (!storeConfigured()) throw fail('Storage is not set up yet — add the Upstash Redis store first.', 503, 'needs_storage');
   const cfg = (await getConfig({ fresh: true })) || {};
   if (passwordSource(cfg)) throw fail('This dashboard is already set up. Sign in with its password.', 409, 'exists');
   if (String(password || '').length < 8) throw fail('Use at least 8 characters.', 400, 'weak');
-  await wipeAll();
+  if ((await readAccounts({ strict: true })).length) throw fail('Existing accounts have no dashboard configuration. Restore the database configuration before continuing.', 503, 'kv_corrupt');
   const next = { passwordHash: hashPassword(password), createdAt: new Date().toISOString() };
   if (!process.env.ACCOUNT_KEY_SECRET) next.keySecret = randomBytes(32).toString('hex');
   if (!process.env.CRON_SECRET) next.cronSecret = randomBytes(32).toString('hex');
-  await saveConfig(next);
+  if (!(await writeConfig(next, { onlyIfMissing: true }))) throw fail('This dashboard is already set up. Sign in with its password.', 409, 'exists');
+  cache = { cfg: next, at: Date.now() };
   return setupState();
 }
 

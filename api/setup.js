@@ -11,8 +11,8 @@
  *   POST {action:'setup', password, apiKey?, agency?}
  *                             first load only: the key is checked with HYROS FIRST
  *                             (nothing is written on a bad key), then the store is
- *                             wiped (fresh start), the password + generated secrets
- *                             are saved and the account is added
+ *                             checked, the password + generated secrets
+ *                             are created only if absent, and the account is added
  *   POST {action:'change-password', password}  password-gated; KV passwords only
  *   POST {action:'harden'}                     drop generated secrets that now match the env
  *   POST {action:'reset', confirm:'RESET'}     factory reset — every app key in KV
@@ -63,7 +63,7 @@ export function errorStatus(err) {
   return err?.status || CODE_STATUS[err?.code] || (err?.name === 'McpError' ? 400 : 500);
 }
 
-/** First run: validate the key before touching the store, then password → wipe → account. */
+/** First run: validate the key, create the password without replacing data, then add the account. */
 async function firstRun({ password, apiKey, agency }) {
   const key = String(apiKey || '').trim();
   if (!storeConfigured()) throw Object.assign(new Error('Storage is not set up yet — add the Upstash Redis store first.'), { status: 503, code: 'needs_storage' });

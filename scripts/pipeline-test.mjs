@@ -449,7 +449,7 @@ try {
   check('replace key restores the agency', rep.keyStatus === 'ok');
   check('removing the agency removes its clients', await acc.removeAccount(added.account.id) && (await acc.listAccounts()).filter((a) => a.kind === 'client').length === 0);
 
-  console.log('\nSelf-serve setup: first run wipes + sets the KV password, generated secrets, hardening, factory reset');
+  console.log('\nSelf-serve setup: preserves data, sets the KV password, generated secrets, hardening, factory reset');
   delete process.env.ACCOUNT_KEY_SECRET;
   delete process.env.CRON_SECRET;
   const setup = await import('../api/_setup.js');
@@ -467,7 +467,7 @@ try {
   check('short password refused', weak?.code === 'weak');
   st = await setup.setPassword('correct-horse-battery');
   check('first run → ready, secrets generated in KV', st.state === 'ready' && st.keySecret === 'kv' && st.cronSecret === 'kv' && st.pendingSecrets === true, JSON.stringify(st));
-  check('first run wiped the earlier install\u2019s data', !mem.has('aihyros:snapshot:latest'));
+  check('first run preserves existing data; only explicit reset can remove it', mem.has('aihyros:snapshot:latest'));
   const dup = await setup.setPassword('another-one-1234').catch((e) => e);
   check('second first-run refused (first-come lock)', dup?.code === 'exists');
   check('checkAccess verifies the KV password (scrypt)', (await auth.checkAccess(reqWith('correct-horse-battery'))).ok === true && (await auth.checkAccess(reqWith('wrong-password-1'))).ok === false);

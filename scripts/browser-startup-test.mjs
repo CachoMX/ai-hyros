@@ -48,4 +48,31 @@ try {
     }
   }
   console.log('Demo entry survives delayed setup and unauthorized data responses without reopening sign-in or setup.');
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    const context = await browser.newContext({ viewport });
+    let dataRequests = 0;
+    await context.route('**/api/**', async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/data') dataRequests += 1;
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({
+        ok: false, error: 'kv_limit', code: 'kv_limit', message: 'The database has reached a usage or storage limit. Check its limits and status in Upstash.',
+      }) });
+    });
+    const page = await context.newPage();
+    await page.goto(base);
+    await page.locator('#gateErr').waitFor({ state: 'visible' });
+    assert((await page.locator('#gateErr').innerText()).includes('usage or storage limit'));
+    assert.equal(await page.locator('#setup').isVisible(), false);
+    assert.equal(dataRequests, 0, 'Storage outage must not continue startup or open first-run setup');
+    await page.locator('#gateKey').fill('fixture-dashboard-password');
+    await page.locator('#gateForm button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector('#gateErr').textContent.includes('usage or storage limit'));
+    assert(!(await page.locator('#gateErr').innerText()).includes('Incorrect password'));
+    await page.screenshot({ path: `shots/storage-error-${viewport.width}.png`, fullPage: true });
+    await page.locator('#gateDemo').click();
+    await page.locator('#tab-warroom').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#gate').isVisible(), false);
+    await context.close();
+  }
+  console.log('Storage outage stays distinct from first-run setup or a bad password on desktop/mobile; Demo remains available.');
 } finally { await browser.close(); }

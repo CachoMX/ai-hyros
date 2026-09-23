@@ -1,8 +1,10 @@
 /**
  * Snapshot persistence via Upstash Redis / Vercel KV REST.
  * No npm dependency — plain fetch, same pattern the lander uses.
- * Every function fails soft: a KV outage degrades to the seed, never a 500.
+ * Snapshot reads may fail soft. Setup/auth reads must distinguish an outage
+ * from a missing record so an unavailable database never starts first-run setup.
  */
+import { logEvent } from './_log.js';
 
 const KEY = 'aihyros:snapshot:latest';
 const HISTORY_PREFIX = 'aihyros:snapshot:';
@@ -56,23 +58,69 @@ export function storeConfigured() {
   return storeCredentials() !== null;
 }
 
-async function kv(command) {
+const STORAGE_MESSAGES = {
+  auth: 'Database authentication failed. Check the Redis REST URL and token in Vercel, then redeploy.',
+  permission: 'Database write permission was denied. Use the standard read/write REST token, not a read-only token, then redeploy.',
+  limit: 'The database has reached a usage or storage limit. Check its limits and status in Upstash.',
+  timeout: 'The database request timed out. Retry after checking the database status.',
+  unavailable: 'The database is temporarily unavailable. Retry later; do not reset this dashboard.',
+  config: 'Database REST configuration is missing or invalid. Check the REST URL and token in Vercel, then redeploy.',
+  response: 'The database returned an invalid response. Check the database connection; do not reset this dashboard.',
+  corrupt: 'The stored dashboard configuration could not be read safely. Restore the configuration from a database backup; do not run setup again.',
+};
+
+function storageError(kind, operation, httpStatus = null) {
+  const code = `kv_${kind}`;
+  const method = ['GET', 'SET', 'DEL', 'SCAN', 'EVAL', 'PING'].includes(operation) ? operation : 'OTHER';
+  logEvent('storage.error', { operation: method, code, httpStatus });
+  return Object.assign(new Error(STORAGE_MESSAGES[kind] || STORAGE_MESSAGES.unavailable), { name: 'StorageError', code, status: 503 });
+}
+
+function storageFailure(status, message) {
+  const text = String(message || '').slice(0, 1000);
+  if (/READONLY|NOPERM|read.only|permission|not allowed/i.test(text)) return 'permission';
+  if (status === 401 || /WRONGPASS|unauthorized|invalid token|authentication/i.test(text)) return 'auth';
+  if (status === 429 || /quota|limit exceeded|exceeded.*limit|max.*(?:size|requests)|OOM/i.test(text)) return 'limit';
+  return status === 403 ? 'permission' : 'unavailable';
+}
+
+async function kv(command, { strict = false } = {}) {
   const creds = storeCredentials();
-  if (!creds) return null;
-  try {
-    const res = await fetch(creds.url, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${creds.token}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(command),
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return body?.result ?? null;
-  } catch {
+  if (!creds) {
+    if (strict) throw storageError('config', command[0]);
     return null;
+  }
+  const controller = new AbortController();
+  let timer;
+  try {
+    const operation = async () => {
+      const res = await fetch(creds.url.trim(), {
+        method: 'POST',
+        signal: controller.signal,
+        redirect: 'error',
+        headers: {
+          authorization: `Bearer ${creds.token.trim()}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(command),
+      });
+      let body;
+      try { body = await res.json(); }
+      catch { throw storageError(res.ok ? 'response' : storageFailure(res.status), command[0], res.status); }
+      if (!res.ok || body?.error) throw storageError(storageFailure(res.status, body?.error), command[0], res.status);
+      if (!body || !Object.hasOwn(body, 'result')) throw storageError('response', command[0], res.status);
+      return body.result;
+    };
+    return await Promise.race([operation(), new Promise((_, reject) => {
+      timer = setTimeout(() => { controller.abort(); reject(storageError('timeout', command[0])); }, 8000);
+    })]);
+  } catch (err) {
+    const failure = err?.name === 'StorageError' ? err : storageError('unavailable', command[0]);
+    if (strict) throw failure;
+    return null;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
 }
 
@@ -86,11 +134,17 @@ export async function kvRaw(command) {
 
 /** Self-serve setup config: password hash + generated secrets (see _setup.js). */
 export async function readConfig() {
-  return readJson(CONFIG_KEY);
+  const cfg = await readJson(CONFIG_KEY, { strict: true });
+  if (cfg !== null && (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)
+    || !/^[0-9a-f]{32}\.[0-9a-f]{64}$/.test(cfg.passwordHash || ''))) throw storageError('corrupt', 'GET');
+  return cfg;
 }
 
-export async function writeConfig(cfg) {
-  return (await kv(['SET', CONFIG_KEY, JSON.stringify(cfg)])) !== null;
+export async function writeConfig(cfg, { onlyIfMissing = false } = {}) {
+  const result = await kv(['SET', CONFIG_KEY, JSON.stringify(cfg), ...(onlyIfMissing ? ['NX'] : [])], { strict: true });
+  if (onlyIfMissing && result === null) return false;
+  if (result !== 'OK') throw storageError('response', 'SET');
+  return true;
 }
 
 /**
@@ -115,10 +169,17 @@ export async function wipeAll() {
   return deleted;
 }
 
-async function readJson(key) {
-  const raw = await kv(['GET', key]);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+async function readJson(key, { strict = false } = {}) {
+  const raw = await kv(['GET', key], { strict });
+  if (raw === null) return null;
+  try {
+    const value = JSON.parse(raw);
+    if (strict && value === null) throw new Error('Unexpected stored null');
+    return value;
+  } catch {
+    if (strict) throw storageError('corrupt', 'GET');
+    return null;
+  }
 }
 
 /**
@@ -170,8 +231,10 @@ export async function deleteAccountData(accountId) {
 }
 
 /** The added-accounts registry (encrypted keys — see _accounts.js). */
-export async function readAccounts() {
-  return (await readJson(ACCOUNTS_KEY))?.accounts || [];
+export async function readAccounts({ strict = false } = {}) {
+  const registry = await readJson(ACCOUNTS_KEY, { strict });
+  if (strict && registry !== null && (!registry || !Array.isArray(registry.accounts))) throw storageError('corrupt', 'GET');
+  return registry?.accounts || [];
 }
 
 export async function writeAccounts(accounts) {

@@ -31,7 +31,9 @@ function remember(candidate, hash) { if (verified.size > 50) verified.clear(); v
  * (`setup: true`).
  */
 export async function checkAccess(req) {
-  const cfg = await getConfig();
+  let cfg;
+  try { cfg = await getConfig(); }
+  catch { return { ok: false, unavailable: true }; }
   const url = new URL(req.url, `http://${req.headers.host || 'local'}`);
   const auth = req.headers.authorization || '';
   const candidates = [
@@ -66,5 +68,6 @@ export function isCron(req) {
 }
 
 export function deny(res, access = {}) {
+  if (access.unavailable) return res.status(503).json({ ok: false, error: 'storage_unavailable', message: 'Dashboard storage is unavailable. Retry later; do not reset the dashboard.' });
   res.status(401).json({ ok: false, error: access.setup ? 'setup_required' : 'unauthorized' });
 }

@@ -2,6 +2,8 @@
 
 ## Release Candidate Recheck
 
+Storage recovery follow-up: all 17 suites passed after adding `storage-outage-test.mjs`. Controlled tests cover authentication/permission/quota errors, invalid responses, read timeouts, corrupted configuration, password preservation, and concurrent setup. Desktop/mobile browser checks verify that a storage outage does not open first-run setup or appear as a wrong-password error. These tests use fixtures; they do not establish that production database service has recovered.
+
 On 2026-09-23 the release candidate passed `npm test` (all 16 suites), `npm run test:browser` (26 synthetic view checks plus the account-switch regression), and `npm run test:browser:live` (26 local live-snapshot view checks). No page errors were reported. A scan of publishable files found no matching locally available secret values. Production's public setup endpoint reported ready, with storage configured and no pending generated secrets. These checks do not certify authenticated production workflows or a live LLM/webhook integration.
 
 ## Previously Recorded Results
