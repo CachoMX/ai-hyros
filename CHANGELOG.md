@@ -6,6 +6,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Creative:** naming is auto-detected from the account's ad names (up to
+  three delimiters, e.g. ` - ` and ` | `, with a proposed slot mapping and
+  its coverage) and applied with an explicit *auto-detected* label that the
+  operator can keep or turn off. Slot columns are shown only for active
+  slots. Demo ads now follow the `Concept_Angle_Hook_Format_Variation`
+  convention so the tab demonstrates parsing.
+
 ### Fixed
 - Large live snapshots no longer fail to persist. Snapshots over 256 KB are
   stored gzip-compressed in Upstash (lossless, existing plain JSON records

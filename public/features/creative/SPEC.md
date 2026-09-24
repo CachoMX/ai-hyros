@@ -22,8 +22,10 @@ Each current range is capped at 200 rows or 35,000 bytes of row data; the four r
 
 Both current and comparison blocks include `context`, a stable encoding of attribution-window and lead-stage settings. Missing or changed context suppresses trends. Incomplete report coverage suppresses concentration flags, even though the observed shares of captured rows remain inspectable. CSV exports include capture time and stale status.
 
-- Naming settings are local per account and initially unconfigured. Default slots are concept, angle, hook, format, variation, with `_` delimiter; defaults are not applied until the operator enables name slots.
-- The five positions can be reordered or ignored. Duplicate slot assignments are rejected. Blank segments stay unknown. Segments beyond the fifth are joined into the final slot. An empty delimiter treats the whole name as the first slot.
+- Naming settings are local per account. Default slots are concept, angle, hook, format, variation, with `_` delimiter. Up to three delimiters split a name together (for example ` - ` and ` | `), longest match first.
+- When nothing is saved, the view inspects the ad names and, if at least 60% of named ads split on a common delimiter set into two or more segments, applies that proposal and labels it **auto-detected** with its coverage; the operator can keep it (saved) or turn it off (ad set fallback, detection disabled). Ads whose name is only a platform id are counted as unnamed and never influence the proposal. A position where most values are ordinals (`Ad 2`, `v3`) is proposed as variation; the rest are proposed in order concept, angle, hook, format. Below the threshold nothing is applied and the banner says why.
+- The five positions can be reordered or ignored. Duplicate slot assignments are rejected. Blank segments stay unknown. Segments beyond the last active slot are joined verbatim into it. No delimiter treats the whole name as the first slot.
+- Slot columns appear only for active slots; with naming unconfigured the table shows no slot columns instead of five empty ones.
 - Configured groupings use the selected parsed dimension. Missing concept names fall back to the actual parent ad set, explicitly labeled. Unclassified rows remain visible. Platform and ad account scope keep unrelated groups separate.
 - Metrics are summed before ROAS is derived. Total revenue is preferred and never has rebills added again; the same fallback and caveats as Profit apply.
 - Variant means an individual native ad row. Share is its revenue divided by the group revenue. A zero/missing total or any negative variant revenue makes concentration unavailable. Zero spend produces null ROAS.
@@ -32,7 +34,7 @@ Both current and comparison blocks include `context`, a stable encoding of attri
 
 ## View states
 
-Fresh, stale, bare skipped, error, null, and empty states render against the feature-check fake DOM. A stale result names its own previous capture time. Controls include a naming editor, evidence thresholds, dimension/platform/evidence filters, search, sorting, expansion to all parsed slots and actual ad IDs, and filtered CSV export with settings and source caveats. Settings are visibly browser-local; storage failures fall back to the session.
+Fresh, stale, bare skipped, error, null, and empty states render against the feature-check fake DOM. A stale result names its own previous capture time. Controls include a naming banner (keep / turn off), a naming editor with up to three delimiters, evidence thresholds, dimension/platform/evidence filters, search, sorting, expansion to all parsed slots and actual ad IDs, and filtered CSV export with settings and source caveats. Settings are visibly browser-local; storage failures fall back to the session.
 
 ## Rules honoured
 

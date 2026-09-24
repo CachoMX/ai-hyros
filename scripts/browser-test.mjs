@@ -42,6 +42,25 @@ try {
     await page.locator('.wr-journal [name="hypothesis"]').fill('Verify delayed conversions before acting.');
     await page.locator('.wr-journal button[type="submit"]').click();
     assert((await page.locator('[data-journal-status]').innerText()).includes('Saved'));
+    // Creative: demo names follow the convention, so naming is auto-detected, parsed into slot columns, and can be kept or turned off.
+    await page.locator('#tab-creative').click();
+    const creativeBanner = page.locator('#view-creative .creative-banner');
+    assert((await creativeBanner.innerText()).includes('Naming auto-detected'), 'Creative must auto-detect the demo naming convention');
+    assert((await page.locator('#view-creative .kpi').first().innerText()).includes('auto-detected'));
+    await page.locator('#view-creative .creative-group summary').first().click();
+    const creativeHeaders = await page.locator('#view-creative .creative-table th').evaluateAll(els => els.map(el => el.textContent.trim()));
+    assert.deepEqual(creativeHeaders.slice(1, 6), ['concept', 'angle', 'hook', 'format', 'variation'], `slot columns: ${creativeHeaders.join(',')}`);
+    const firstSlots = await page.locator('#view-creative .creative-table tbody tr').first().locator('td').evaluateAll(els => els.slice(1, 6).map(el => el.textContent.trim()));
+    assert(firstSlots.every(text => text && text !== '—' && text !== 'blank'), `parsed slots must not be empty: ${firstSlots.join(',')}`);
+    await page.locator('#view-creative [data-creative-dimension]').selectOption('hook');
+    assert((await page.locator('#view-creative .kpi').first().innerText()).includes('hook'));
+    await page.locator('#view-creative [data-creative-off]').click();
+    assert((await page.locator('#view-creative .creative-banner').innerText()).includes('not configured'), 'Turn off must fall back to ad sets');
+    assert.equal(await page.locator('#view-creative .creative-table th', { hasText: /^concept$/ }).count(), 0, 'no slot columns once naming is off');
+    await page.locator('#view-creative [name="detect"]').check();
+    await page.locator('#view-creative [name="configured"]').check();
+    await page.locator('#view-creative [data-creative-settings] button[type="submit"]').click();
+    assert((await page.locator('#view-creative .creative-banner').innerText()).includes('Naming saved'));
     await page.locator('#tab-copilot').click();
     await page.locator('#view-copilot [data-question="Revenue summary"]').click();
     assert((await page.locator('.cp-answer').innerText()).includes('revenue'));

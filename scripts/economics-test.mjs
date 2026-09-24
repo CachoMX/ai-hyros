@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { computeProfit, computeProfitRows, loadProfitSettings, saveProfitSettings, revenueOf, captureEconomicsSnapshot, windowDays } from '../public/shared/profit.js';
-import { groupCreatives, parseAdName, comparablePeriods, compareGroup, saveCreativeSettings, loadCreativeSettings } from '../public/features/creative/analysis.js';
+import { groupCreatives, parseAdName, comparablePeriods, compareGroup, saveCreativeSettings, loadCreativeSettings, normalizeCreativeSettings, detectNaming, resolveNaming, activeSlots } from '../public/features/creative/analysis.js';
 import { creativeBlock } from '../public/features/creative/server.js';
 import { csvText } from '../public/features/profit/ui.js';
 import { buildDemoSnapshot } from '../public/demo.js';
@@ -88,12 +88,53 @@ await test('blocked local storage preserves isolated session settings without a 
   } finally { if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor); else delete globalThis.localStorage; }
 });
 
-const creativeSettings = { configured: true, separator: '|', slots: ['concept', 'angle', 'hook', 'format', 'variation'] };
+const SLOTS_ALL = ['concept', 'angle', 'hook', 'format', 'variation'];
+const creativeSettings = { configured: true, separator: '|', slots: SLOTS_ALL };
 const ads = [80, 10, 10].map((revenue, i) => ({ id: `a${i}`, name: `Concept|Angle|Hook|Video|v${i}`, totalRevenue: revenue, cost: i === 0 ? 80 : 10, sales: 1, _account: 'a', _traffic: 'facebook' }));
 await test('name parsing preserves blank slots, empty delimiters, and trailing segments', () => {
   assert.deepEqual(parseAdName(' Concept | | Hook | Video | v1|extra ', creativeSettings.slots, '|'), { concept: 'Concept', angle: null, hook: 'Hook', format: 'Video', variation: 'v1|extra' });
   assert.equal(parseAdName('Whole name', creativeSettings.slots, '').concept, 'Whole name');
   assert.equal(parseAdName('').variation, null);
+});
+await test('several delimiters split names together; overflow joins into the last active slot', () => {
+  const slots = ['variation', 'concept', 'angle', 'ignore', 'ignore'];
+  assert.deepEqual(parseAdName('Ad 2 - Zoe 2 | Your Insurance Company Will Hate Me For This', slots, [' | ', ' - ']),
+    { concept: 'Zoe 2', angle: 'Your Insurance Company Will Hate Me For This', hook: null, format: null, variation: 'Ad 2' });
+  assert.deepEqual(parseAdName('Ad 6 - Car Wallpaper', slots, [' | ', ' - ']).angle, null);
+  assert.equal(parseAdName('a - b | c - d | e', slots, [' | ', ' - ']).angle, 'c - d | e');
+  assert.equal(parseAdName('Before-After_Transformation_30-days_Static_v3', undefined, '_').concept, 'Before-After');
+  const settings = normalizeCreativeSettings({ separators: [' - ', '', ' - ', ' | ', '_', '#'], separator: 'ignored' });
+  assert.deepEqual(settings.separators, [' - ', ' | ', '_']); assert.equal(settings.separator, ' - '); assert.equal(settings.detect, true);
+  assert.deepEqual(normalizeCreativeSettings({ separator: '|' }).separators, ['|']);
+  assert.deepEqual(normalizeCreativeSettings({ separators: [] }).separators, []);
+  assert.equal(parseAdName('Whole|name', SLOTS_ALL, []).concept, 'Whole|name');
+});
+const triggerfishLike = ['Ad 2 - Zoe 2 | Your Insurance Company Will Hate Me For This', 'Ad 4 - Zoe 4 | Phone Call 2', 'Ad 6 - Car Wallpaper',
+  'Ad 1 - Zoe 1 | Explain This To Me', 'Ad 3 - Zoe 3 | Phone Call', 'Ad 7 - PayPal', 'Ad 9 - Shocked Guy', 'Ad 8 - Car Graphic 1',
+  "Ad 5 - Zoe 5 | I Can't Believe This Worked", 'Ad 11 - Text Blurred Dark', 'Ad 10 - Text Blurred', 'Ad 746854695745', 'Ad 746854667668', "Ad 5 - Zoe 5 | I Can't Believe This Worked"].map((name, i) => ({ id: `t${i}`, name }));
+await test('naming detection proposes the delimiters and slots the account actually uses', () => {
+  const detected = detectNaming(triggerfishLike);
+  assert.deepEqual(detected.separators, [' | ', ' - ']);
+  assert.deepEqual(detected.slots, ['variation', 'concept', 'angle', 'ignore', 'ignore']);
+  assert.equal(detected.named, 11); assert.equal(detected.unnamed, 2); assert.equal(detected.total, 13);
+  assert.equal(detected.coverage, 1); assert.equal(detected.confident, true);
+  const underscore = detectNaming(['UGC_Skeptic_I-was-skeptical_Video-30s_v1', 'Bundle_Value_Save-20_Static_v1', 'Press_Authority_As-seen-in_Static_v1', 'Founder_Origin_Why_Video_v2'].map((name) => ({ name })));
+  assert.deepEqual(underscore.separators, ['_']); assert.deepEqual(underscore.slots, ['concept', 'angle', 'hook', 'format', 'variation']); assert.equal(underscore.confident, true);
+  const loose = detectNaming(['Founder Story 45s', 'Static — Bundle Offer', 'UGC Hook — "I was skeptical"', 'Testimonial Mashup'].map((name) => ({ name })));
+  assert.equal(loose.confident, false); assert.equal(loose.coverage, 0.5);
+  assert.equal(detectNaming([{ name: 'A_B' }, { name: 'C_D' }]).confident, false);
+  assert.equal(detectNaming([]).named, 0); assert.equal(detectNaming(null).confident, false);
+});
+await test('resolved naming: saved wins, confident detection is labelled, and turning detection off keeps the fallback', () => {
+  const detected = resolveNaming({}, triggerfishLike);
+  assert.equal(detected.source, 'detected'); assert.equal(detected.settings.configured, true);
+  assert.deepEqual(activeSlots(detected.settings), ['concept', 'angle', 'variation']);
+  assert.equal(groupCreatives(triggerfishLike, detected.settings, 'concept').find((group) => group.name === 'Zoe 5').variants.length, 2);
+  assert.equal(groupCreatives(triggerfishLike, detected.settings, 'concept').find((group) => group.name === 'Unclassified').variants.length, 2);
+  assert.equal(resolveNaming({ detect: false }, triggerfishLike).source, 'none');
+  const saved = resolveNaming({ configured: true, separator: '|' }, triggerfishLike);
+  assert.equal(saved.source, 'saved'); assert.deepEqual(saved.settings.separators, ['|']);
+  assert.equal(resolveNaming({}, [{ name: 'Founder Story 45s' }, { name: 'Static Offer' }, { name: 'Plain' }]).source, 'none');
 });
 await test('concentration measures revenue share, with weighted ROAS and thresholds', () => {
   const group = groupCreatives(ads, creativeSettings)[0];

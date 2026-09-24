@@ -35,3 +35,11 @@
 @media (max-width: 900px) { .creative-group > summary { grid-template-columns: minmax(0, 1fr) repeat(2, minmax(70px, 100px)); } .creative-title { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .creative-controls > label { flex: 1 1 125px; } .creative-context { align-items: start; } .creative-actions { align-items: start; } }
 @media (max-width: 360px) { #view-creative .kpis { grid-template-columns: minmax(0, 1fr); } }
+.creative-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--brand); border-radius: 8px; background: rgba(81,80,246,.06); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.creative-banner.quiet { border-color: var(--border); background: var(--surface-2); color: var(--ink-2); }
+.creative-banner code { font: 11.5px var(--mono); min-width: 1.8em; text-align: center; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: #fff; white-space: pre; }
+.creative-banner-actions { display: inline-flex; gap: 8px; margin-left: auto; }
+.creative-banner button.ghost { background: transparent; color: var(--ink-2); border-color: var(--border); }
+.creative-settings > summary .sub { margin-left: 6px; }
+.creative-table.compact { min-width: 640px; }
+.creative-table td .sub { color: var(--ink-3, var(--ink-2)); }

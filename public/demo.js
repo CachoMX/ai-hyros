@@ -40,9 +40,12 @@ const CAMPAIGNS = [
   ['YouTube — Remarketing',      1, 3.1,  280, ['Site Remarketing', 'Customer Match']],
 ];
 
-const AD_NAMES = ['UGC Hook — "I was skeptical"', 'Static — Bundle Offer', 'Founder Story 45s',
-  'Testimonial Mashup', 'Problem/Solution 30s', 'Carousel — Best Sellers', 'Before & After',
-  'Press Feature — Static'];
+// Demo ads follow the Concept_Angle_Hook_Format_Variation convention the
+// Creative tab parses, so the Demo account shows name slots working.
+const AD_NAMES = ['UGC_Skeptic_I-was-skeptical_Video-30s_v1', 'Bundle_Value_Save-20-percent_Static_v1',
+  'Founder_Origin-story_Why-we-built-it_Video-45s_v2', 'Testimonials_Social-proof_Real-customers_Mashup_v1',
+  'Problem-Solution_Pain-point_Tired-of-guessing_Video-30s_v1', 'Best-Sellers_Range_Shop-the-top-5_Carousel_v1',
+  'Before-After_Transformation_30-days-in_Static_v3', 'Press_Authority_As-seen-in_Static_v1'];
 
 const FIRST = ['sarah', 'mike', 'jenna', 'carlos', 'emily', 'david', 'priya', 'tom', 'lena',
   'marcus', 'olivia', 'ryan', 'nadia', 'chris', 'amara', 'jake', 'sofia', 'ben', 'maya', 'liam'];
